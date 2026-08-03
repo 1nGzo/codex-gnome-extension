@@ -10,6 +10,6 @@
     "50"
   ],
   "settings-schema": "org.gnome.shell.extensions.codex-usage",
-  "version": 5,
+  "version": 1,
   "url": "https://github.com/Almighty-Shogun/codex-gnome-extension"
 }
