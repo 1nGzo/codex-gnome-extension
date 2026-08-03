@@ -1,0 +1,188 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+read -r UUID SCHEMA_ID <<<"$(
+python3 - <<'PY' "${SOURCE_DIR}/metadata.json"
+import json
+import sys
+
+with open(sys.argv[1], "r", encoding="utf-8") as f:
+    metadata = json.load(f)
+
+print(metadata["uuid"], metadata["settings-schema"])
+PY
+)"
+TARGET_DIR="${HOME}/.local/share/gnome-shell/extensions/${UUID}"
+
+SETTINGS=()
+
+# Both the help text and the argument checking are generated from the schema, so
+# adding a key there is all it takes for the installer to accept it.
+schema_tool() {
+    python3 - "$@" <<'PY'
+import glob
+import os
+import sys
+import xml.etree.ElementTree as ElementTree
+
+mode, schema_dir, schema_id, *pairs = sys.argv[1:]
+
+keys = {}
+enums = {}
+
+for path in sorted(glob.glob(os.path.join(schema_dir, "*.gschema.xml"))):
+    root = ElementTree.parse(path).getroot()
+
+    for enum in root.findall("enum"):
+        enums[enum.get("id")] = [value.get("nick") for value in enum.findall("value")]
+
+    for schema in root.findall("schema"):
+        if schema.get("id") == schema_id:
+            for key in schema.findall("key"):
+                keys[key.get("name")] = key
+
+
+def accepted(key):
+    if key.get("enum"):
+        return "|".join(enums.get(key.get("enum"), []))
+
+    if key.get("type") == "b":
+        return "true|false"
+
+    span = key.find("range")
+
+    if key.get("type") == "i" and span is not None:
+        return f"{span.get('min')}..{span.get('max')}"
+
+    return "VALUE"
+
+
+if mode == "list":
+    width = max(len(f"--{name}=<{accepted(key)}>") for name, key in keys.items())
+
+    for name, key in keys.items():
+        default = (key.findtext("default") or "").strip().strip("'")
+        print(f"  {f'--{name}=<{accepted(key)}>'.ljust(width)}  default: {default}")
+
+    sys.exit(0)
+
+errors = []
+
+for pair in pairs:
+    name, _, value = pair.partition("=")
+    key = keys.get(name)
+
+    if key is None:
+        errors.append(f"unknown setting '{name}'")
+        continue
+
+    if key.get("enum"):
+        allowed = enums.get(key.get("enum"), [])
+
+        if value not in allowed:
+            errors.append(f"{name} must be one of {', '.join(allowed)} (got '{value}')")
+
+        continue
+
+    if key.get("type") == "b" and value not in ("true", "false"):
+        errors.append(f"{name} must be true or false (got '{value}')")
+        continue
+
+    if key.get("type") == "i":
+        try:
+            number = int(value)
+        except ValueError:
+            errors.append(f"{name} must be a whole number (got '{value}')")
+            continue
+
+        span = key.find("range")
+
+        if span is not None and not int(span.get("min")) <= number <= int(span.get("max")):
+            errors.append(f"{name} must be from {span.get('min')} to {span.get('max')} (got '{number}')")
+
+for error in errors:
+    print(f"install: {error}", file=sys.stderr)
+
+sys.exit(2 if errors else 0)
+PY
+}
+
+usage() {
+    cat <<EOF
+Usage: ./install [--setting=value ...]
+
+Installs the extension, then writes any settings given on the command line so a
+fresh machine comes up configured. Without options the schema defaults apply.
+
+Settings:
+$(schema_tool list "${SOURCE_DIR}/schemas" "${SCHEMA_ID}")
+
+  -h, --help  Show this message
+
+Examples:
+  ./install --panel-position=left --panel-index=-1
+  ./install --use-24-hour-time=true --show-progress-bars=false
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
+            usage
+            exit 0
+        ;;
+
+        --*=*)
+            SETTINGS+=("${1#--}")
+            shift
+        ;;
+
+        --*)
+            echo "install: settings are written as --key=value (got '$1')" >&2
+            exit 2
+        ;;
+
+        *)
+            echo "install: unknown argument '$1'" >&2
+            echo >&2
+            usage >&2
+            exit 2
+        ;;
+    esac
+done
+
+# Checked before anything is written, so a typo cannot leave a half-configured
+# install behind.
+schema_tool check "${SOURCE_DIR}/schemas" "${SCHEMA_ID}" ${SETTINGS[@]+"${SETTINGS[@]}"}
+
+rm -rf "${TARGET_DIR}"
+mkdir -p "${TARGET_DIR}"
+
+cp "${SOURCE_DIR}/metadata.json" "${TARGET_DIR}/"
+cp "${SOURCE_DIR}/extension.js" "${TARGET_DIR}/"
+cp "${SOURCE_DIR}/prefs.js" "${TARGET_DIR}/"
+cp "${SOURCE_DIR}/stylesheet.css" "${TARGET_DIR}/"
+cp -r "${SOURCE_DIR}/icons" "${TARGET_DIR}/"
+cp -r "${SOURCE_DIR}/schemas" "${TARGET_DIR}/"
+
+# Settings are unreadable until the schema is compiled into the bundle.
+glib-compile-schemas "${TARGET_DIR}/schemas"
+
+# The schema is not installed system-wide, so gsettings is pointed at the copy
+# that was just compiled into the extension bundle.
+for pair in ${SETTINGS[@]+"${SETTINGS[@]}"}; do
+    key="${pair%%=*}"
+    value="${pair#*=}"
+
+    if gsettings --schemadir "${TARGET_DIR}/schemas" set "${SCHEMA_ID}" "${key}" "${value}"; then
+        echo "Set ${key} = ${value}"
+    else
+        echo "install: failed to set ${key} = ${value}" >&2
+        exit 1
+    fi
+done
+
+echo "Installed to ${TARGET_DIR}"
+echo "Enable with: gnome-extensions enable ${UUID}"

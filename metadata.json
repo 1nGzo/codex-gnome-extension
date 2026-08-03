@@ -1,0 +1,15 @@
+{
+  "uuid": "codex-usage@almighty-shogun",
+  "name": "Codex Usage",
+  "description": "Shows current Codex usage limits and credits in the GNOME top bar.",
+  "shell-version": [
+    "46",
+    "47",
+    "48",
+    "49",
+    "50"
+  ],
+  "settings-schema": "org.gnome.shell.extensions.codex-usage",
+  "version": 5,
+  "url": "https://github.com/Almighty-Shogun/codex-gnome-extension"
+}

@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <enum id="org.gnome.shell.extensions.codex-usage.panel-position">
+    <value nick="left" value="0"/>
+    <value nick="center" value="1"/>
+    <value nick="right" value="2"/>
+  </enum>
+
+  <schema id="org.gnome.shell.extensions.codex-usage"
+          path="/org/gnome/shell/extensions/codex-usage/">
+
+    <key name="panel-position" enum="org.gnome.shell.extensions.codex-usage.panel-position">
+      <default>'right'</default>
+      <summary>Panel box</summary>
+      <description>Which section of the top bar the indicator is placed in.</description>
+    </key>
+
+    <key name="panel-index" type="i">
+      <default>0</default>
+      <range min="-21" max="20"/>
+      <summary>Position within the box</summary>
+      <description>Order within the chosen panel box. 0 is first, -1 is last, and lower negatives count back from the end.</description>
+    </key>
+
+    <key name="show-icon" type="b">
+      <default>true</default>
+      <summary>Show the Codex icon in the panel</summary>
+      <description>Hide it to leave only the percentages in the top bar.</description>
+    </key>
+
+    <key name="show-five-hour" type="b">
+      <default>true</default>
+      <summary>Show the 5-hour window in the panel</summary>
+      <description>The 5-hour usage window. Hiding both falls back to the icon alone.</description>
+    </key>
+
+    <key name="show-weekly" type="b">
+      <default>true</default>
+      <summary>Show the weekly window in the panel</summary>
+      <description>The 7-day usage window. Hiding both falls back to the icon alone.</description>
+    </key>
+
+    <key name="show-credits" type="b">
+      <default>true</default>
+      <summary>Show credits remaining in the menu</summary>
+      <description>Hide it if your plan does not use credits.</description>
+    </key>
+
+    <key name="show-progress-bars" type="b">
+      <default>true</default>
+      <summary>Show progress bars in the menu</summary>
+      <description>Draw a usage bar under each window in the popup.</description>
+    </key>
+
+    <key name="use-24-hour-time" type="b">
+      <default>false</default>
+      <summary>Use 24-hour times</summary>
+      <description>Render reset and update times as 19:50 rather than 7:50 PM.</description>
+    </key>
+
+  </schema>
+</schemalist>
