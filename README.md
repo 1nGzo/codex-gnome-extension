@@ -30,7 +30,7 @@ Selecting the indicator opens a popup with:
 - Credits remaining, shown as `0` when Codex does not report a credit value
 - `Latest Codex update:`, when the newest Codex data was seen
 
-## Requirements
+## 📦 Requirements
 
 - GNOME Shell 46, 47, 48, 49, or 50
 - A working Codex CLI setup that writes session files to `~/.codex/sessions`
@@ -39,11 +39,9 @@ No network access and no credentials are required. The extension only reads loca
 
 Codex reports whichever windows its plan exposes. If only the weekly window is present in your session files, the panel shows that one window on its own.
 
-## What It Does
+## ✨ What It Does
 
 The extension gives GNOME Shell a view of how much of each Codex usage window is left without opening the CLI. It is intended for users already running Codex locally, where session data is being written under `~/.codex/sessions`.
-
-## How It Works
 
 Codex writes one JSONL transcript per session under `~/.codex/sessions/YYYY/MM/DD`. Some records in it are `event_msg` entries whose `token_count` payload carries a `rate_limits` block:
 
@@ -68,7 +66,7 @@ On each refresh, the extension:
 
 Because updates only arrive while Codex is running, the last known values stay on screen when it closes rather than being blanked. The popup's `Latest Codex update:` line is how you tell how current they are. Refresh errors are caught and logged inside the timer callback, which always asks for another tick, so a parsing or filesystem error does not stop future updates.
 
-## Settings
+## 💻 Settings
 
 Open them with:
 
@@ -100,13 +98,13 @@ The installer writes these for you, so a fresh machine comes up configured:
 
 Every key in the schema is accepted as `--key=value`. Names, ranges and accepted values are read from the schema itself, so `./install --help` always lists exactly what the installed version supports, and a typo is rejected before anything is written.
 
-## Setup
+## 🔧 Setup
 
 Nothing to set up. Codex writes the session files this extension reads as a normal part of running, so once the extension is installed and enabled it picks them up on its next refresh.
 
 If `~/.codex/sessions` is empty, run a Codex prompt and the first transcript appears.
 
-## Installation & Updating
+## 🚀 Installation & Updating
 
 ```bash
 git clone https://github.com/Almighty-Shogun/codex-gnome-extension.git
@@ -136,7 +134,7 @@ cd codex-gnome-extension
 
 The update script fetches changes from GitHub, fast-forwards the current branch, and runs the installer.
 
-## Notes
+## 📝 Notes
 
 - The extension makes no network requests and reads no credentials. It only reads the session files Codex has already written under `~/.codex/sessions`.
 - The panel shows **remaining** percentages. The session files store Codex's raw `used_percent`, so the two are inverses of each other.
@@ -148,7 +146,7 @@ The update script fetches changes from GitHub, fast-forwards the current branch,
 - The popup uses GNOME Shell's standard panel menu behavior and is anchored to the Codex Usage top-bar indicator.
 - The menu width is intentionally compact and the progress bars are sized to match.
 
-## Troubleshooting
+## 🩺 Troubleshooting
 
 ```bash
 # Is Codex writing session files at all?
