@@ -105,8 +105,32 @@ export default class CodexUsagePreferences extends ExtensionPreferences {
         menuGroup.add(barsRow);
         menuGroup.add(clockRow);
 
+        const usageGroup = new Adw.PreferencesGroup({
+            title: 'Usage',
+            description: 'How often Codex itself is asked for the current limits.'
+        });
+
+        const intervalRow = new Adw.SpinRow({
+            title: 'Seconds between reads',
+            subtitle: 'The panel redraws every 30 seconds either way',
+            adjustment: new Gtk.Adjustment({
+                lower: 60,
+                upper: 3600,
+                step_increment: 30
+            })
+        });
+
+        intervalRow.value = settings.get_int('limit-interval');
+
+        intervalRow.connect('notify::value', () => {
+            settings.set_int('limit-interval', Math.round(intervalRow.value));
+        });
+
+        usageGroup.add(intervalRow);
+
         page.add(panelGroup);
         page.add(menuGroup);
+        page.add(usageGroup);
 
         window.add(page);
     }

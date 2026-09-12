@@ -8,7 +8,7 @@
 
 This GNOME Shell extension adds a Codex usage indicator to the top bar, showing how much of each usage window is left.
 
-It makes **no API calls**. Codex already records the rate limits it is told about into the session transcript it writes locally, and the extension reads those files. Nothing polls OpenAI, so there is nothing to rate-limit.
+The extension itself opens no sockets and reads no credentials. It asks the Codex CLI, over that CLI's own stdio, for the limits of the account it is already signed in as, and does so at most once every few minutes.
 
 When both usage windows are reported, the panel label is:
 
@@ -28,43 +28,53 @@ Selecting the indicator opens a popup with:
 - Weekly usage remaining
 - When each window resets
 - Credits remaining, shown as `0` when Codex does not report a credit value
-- `Latest Codex update:`, when the newest Codex data was seen
+- `Latest Codex update:`, when the limits were last read
 
 ## 📦 Requirements
 
 - GNOME Shell 46, 47, 48, 49, or 50
-- A working Codex CLI setup that writes session files to `~/.codex/sessions`
+- The `codex` CLI on your `PATH`, signed in to an account with a plan
 
-No network access and no credentials are required. The extension only reads local files.
-
-Codex reports whichever windows its plan exposes. If only the weekly window is present in your session files, the panel shows that one window on its own.
+Codex reports whichever windows its plan exposes. If only the weekly window comes back, the panel shows that one window on its own. An API key account reports no plan windows at all, and the panel reads `Usage unavailable`.
 
 ## ✨ What It Does
 
-The extension gives GNOME Shell a view of how much of each Codex usage window is left without opening the CLI. It is intended for users already running Codex locally, where session data is being written under `~/.codex/sessions`.
+The extension gives GNOME Shell a view of how much of each Codex usage window is left without opening the CLI.
 
-Codex writes one JSONL transcript per session under `~/.codex/sessions/YYYY/MM/DD`. Some records in it are `event_msg` entries whose `token_count` payload carries a `rate_limits` block:
+Codex ships a JSON-RPC server, `codex app-server`, that speaks newline-delimited JSON over stdio. The extension starts it, exchanges three frames, and kills it:
 
 ```json
-"rate_limits": {
-  "primary":   { "used_percent": 30.0, "window_minutes": 10080, "resets_at": 1786194326 },
-  "secondary": { "used_percent": 12.0, "window_minutes": 300,   "resets_at": 1786125600 },
-  "credits":   { "has_credits": false, "unlimited": false, "balance": "0" }
+{"id":1,"method":"initialize","params":{"clientInfo":{"name":"codex-usage","title":"Codex Usage","version":"1.0.0"},"capabilities":{"experimentalApi":true}}}
+{"method":"initialized","params":{}}
+{"id":2,"method":"account/rateLimits/read"}
+```
+
+The answer to the third frame carries the current limits:
+
+```json
+"rateLimits": {
+  "limitId":   "codex",
+  "primary":   { "usedPercent": 0,  "windowDurationMins": 300,   "resetsAt": 1789186574 },
+  "secondary": { "usedPercent": 54, "windowDurationMins": 10080, "resetsAt": 1789510969 },
+  "credits":   { "hasCredits": false, "unlimited": false, "balance": "0" },
+  "planType":  "plus"
 }
 ```
 
-Codex appends to those transcripts as it works and nothing signals when one changes, so the extension re-reads the session directory every 30 seconds and leans on modified times to keep that cheap.
+On each read, the extension:
 
-On each refresh, the extension:
+1. Finds `codex` on `PATH` and starts `codex app-server` with pipes for stdin and stdout. A missing CLI is a clean failure rather than an error.
+2. Sends the handshake and the read, holding stdin open until the answer arrives. The server exits without answering if stdin is closed early.
+3. Ignores frames it does not recognize. The server sends notifications of its own, such as `remoteControl/status/changed`, before the answer.
+4. Takes `rateLimits` and ignores `rateLimitsByLimitId`. The other entries there are a single model's own budget, and showing them would read as a second plan. A `limitId` that is not `codex` is treated as no plan windows.
+5. Classifies each window by `windowDurationMins`, where `300` is the 5-hour window and `10080` is the weekly one. The labels come from the duration rather than from the field name, so a window whose length changes is still named correctly.
+6. Writes the reading to `~/.cache/codex-usage@almighty-shogun/limits.json` and redraws the panel and the popup.
 
-1. Lists every `.jsonl` file under `~/.codex/sessions` and keeps the 20 most recently modified. Codex files a session under the day it *started* and keeps appending there while it runs, so the newest data is often not in the newest-dated directory; the ranking is by modified time, not by path.
-2. Checks each of those files by path and microsecond-precision modified time, reusing cached parse results for unchanged files. The cache belongs to the extension rather than the indicator, so changing a setting does not force a re-parse.
-3. Reads the changed files and extracts the `event_msg` records that carry `rate_limits`.
-4. Classifies each reported limit by `window_minutes`, where `300` is the 5-hour window and `10080` is the weekly window.
-5. Keeps the newest known value for each window independently, so a weekly-only update does not overwrite or masquerade as 5-hour usage.
-6. Redraws the panel label and the popup from the newest values.
+The whole exchange takes under a second, needs no terminal, and writes nothing into `~/.codex/sessions`.
 
-Because updates only arrive while Codex is running, the last known values stay on screen when it closes rather than being blanked. The popup's `Latest Codex update:` line is how you tell how current they are. Refresh errors are caught and logged inside the timer callback, which always asks for another tick, so a parsing or filesystem error does not stop future updates.
+Reading is deliberately rarer than drawing. The panel redraws every 30 seconds, but Codex is only asked every 5 minutes by default, and the last reading is used in between. A read that fails leaves the last numbers on screen and doubles the wait before the next attempt, up to an hour, so a CLI that is gone or signed out costs one failed start an hour rather than one every 30 seconds. The first success resets that wait.
+
+The cached reading is loaded again when the extension is enabled, so the panel comes up with the last known numbers instead of blank. The popup's `Latest Codex update:` line is how you tell how current they are.
 
 ## 💻 Settings
 
@@ -84,6 +94,7 @@ gnome-extensions prefs codex-usage@almighty-shogun
 | Show credits remaining | On | Include the credits row in the menu |
 | Show progress bars | On | Draw a usage bar under each window in the menu |
 | Use 24-hour times | Off | Render `19:50` rather than `7:50 PM` |
+| Seconds between reads | 300 | How often Codex is asked for the limits, from 60 to 3600 |
 
 Clutter appends on any negative index, so `-2` would otherwise be identical to `-1`. Values past `-1` are instead resolved against the box's contents when the indicator is inserted, making `-2` the second-to-last slot, `-3` the third-to-last and so on, clamped to the start of the box.
 
@@ -93,16 +104,22 @@ The installer writes these for you, so a fresh machine comes up configured:
 
 ```bash
 ./install --panel-position=left --panel-index=-1
-./install --use-24-hour-time=true --show-progress-bars=false
+./install --use-24-hour-time=true --limit-interval=900
 ```
 
 Every key in the schema is accepted as `--key=value`. Names, ranges and accepted values are read from the schema itself, so `./install --help` always lists exactly what the installed version supports, and a typo is rejected before anything is written.
 
 ## 🔧 Setup
 
-Nothing to set up. Codex writes the session files this extension reads as a normal part of running, so once the extension is installed and enabled it picks them up on its next refresh.
+Nothing to set up beyond a working Codex CLI. Once the extension is installed and enabled it asks Codex for the limits on its first refresh.
 
-If `~/.codex/sessions` is empty, run a Codex prompt and the first transcript appears.
+Check that the CLI is where the extension will look for it:
+
+```bash
+command -v codex
+```
+
+GNOME Shell starts the CLI with the session's `PATH`, so a `codex` installed under `~/.local/bin` or `~/.bun/bin` is found only if that directory is on the `PATH` your session was started with.
 
 ## 🚀 Installation & Updating
 
@@ -136,29 +153,32 @@ The update script fetches changes from GitHub, fast-forwards the current branch,
 
 ## 📝 Notes
 
-- The extension makes no network requests and reads no credentials. It only reads the session files Codex has already written under `~/.codex/sessions`.
-- The panel shows **remaining** percentages. The session files store Codex's raw `used_percent`, so the two are inverses of each other.
-- With Codex closed, the last known values persist rather than being cleared.
+- The extension makes no requests of its own and reads no credentials. It asks the signed-in Codex CLI and renders what comes back.
+- Nothing pops up. `codex app-server` is a stdio JSON-RPC server, not a terminal, and no terminal window is opened to run it.
+- The panel shows **remaining** percentages. Codex reports `usedPercent`, so the two are inverses of each other.
+- With Codex closed, or with the CLI removed, the last known values persist rather than being cleared.
 - Reset times drop the date when the window resets today: `Resets at 7:50 PM` versus `Resets August 7 at 10:00 PM`.
-- If Codex stops reporting a specific window, the popup keeps the last known value while that window is still relevant and marks when it was last reported.
-- Credits are normalized before display. Missing credits and `has_credits: false` are rendered as `0`, while fields like `balance`, `remaining`, or `unlimited` are rendered as simple readable values. The row can be hidden in settings.
-- The `resets_at` values are Unix epoch seconds and are rendered in local time.
+- Credits are normalized before display. Missing credits are rendered as `0`, `unlimited` as `Unlimited`, and anything else as its `balance`. The row can be hidden in settings.
+- The `resetsAt` values are Unix epoch seconds and are rendered in local time.
 - The popup uses GNOME Shell's standard panel menu behavior and is anchored to the Codex Usage top-bar indicator.
 - The menu width is intentionally compact and the progress bars are sized to match.
 
 ## 🩺 Troubleshooting
 
 ```bash
-# Is Codex writing session files at all?
-ls -lt ~/.codex/sessions/*/*/*/*.jsonl | head
+# Does the CLI answer at all, and how fast?
+time (printf '%s\n' \
+  '{"id":1,"method":"initialize","params":{"clientInfo":{"name":"c","title":"c","version":"1"},"capabilities":{"experimentalApi":true}}}' \
+  '{"method":"initialized","params":{}}' \
+  '{"id":2,"method":"account/rateLimits/read"}'; sleep 3) | codex app-server | grep '"id":2'
 
-# Which usage windows does your plan actually report?
-grep -ho '"window_minutes":[0-9]*' ~/.codex/sessions/*/*/*/*.jsonl | sort | uniq -c
+# What the extension last read, and when
+cat ~/.cache/codex-usage@almighty-shogun/limits.json
 
 # Extension errors
 journalctl --user -b | grep codex-usage
 ```
 
-If the panel reads `Usage unavailable`, no session file has yet reported a
-`token_count` payload containing `rate_limits`: run a Codex prompt and wait for
-the next 30-second refresh.
+The `sleep 3` matters: the server exits without answering if stdin closes before the answer is written.
+
+If the panel reads `Usage unavailable`, Codex reported no plan windows. That is what an API key account answers, and what a signed-out CLI answers. Run `codex` once, confirm it is signed in to an account with a plan, and wait for the next read.

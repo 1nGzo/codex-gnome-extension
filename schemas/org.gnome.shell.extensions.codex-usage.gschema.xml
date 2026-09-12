@@ -58,5 +58,14 @@
             <description>Render reset and update times as 19:50 rather than 7:50 PM.</description>
         </key>
 
+        <key name="limit-interval" type="i">
+            <default>300</default>
+            <range min="60" max="3600"/>
+            <summary>Seconds between usage reads</summary>
+            <description>How often the Codex app-server is asked for the current limits. The panel redraws every 30 seconds either way, using
+            the last reading until the next one is due.
+            </description>
+        </key>
+
     </schema>
 </schemalist>
