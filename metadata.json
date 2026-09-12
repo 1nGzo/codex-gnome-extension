@@ -2,7 +2,7 @@
     "uuid": "codex-usage@almighty-shogun",
     "name": "Codex Usage",
     "description": "Shows current Codex usage limits and credits in the GNOME top bar.",
-    "version": 1,
+    "version": 2,
     "shell-version": [
         "46",
         "47",
