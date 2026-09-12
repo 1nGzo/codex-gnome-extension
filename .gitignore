@@ -4,6 +4,9 @@
 .vscode/*
 *.iml
 
+# Tools
+.ruimte/
+
 # VS Code extensions
 !.vscode/extensions.json
 
