@@ -162,6 +162,7 @@ mkdir -p "${TARGET_DIR}"
 
 cp "${SOURCE_DIR}/metadata.json" "${TARGET_DIR}/"
 cp "${SOURCE_DIR}/extension.js" "${TARGET_DIR}/"
+cp "${SOURCE_DIR}/providers.js" "${SOURCE_DIR}/usage.js" "${SOURCE_DIR}/read-antigravity.py" "${TARGET_DIR}/"
 cp "${SOURCE_DIR}/prefs.js" "${TARGET_DIR}/"
 cp "${SOURCE_DIR}/stylesheet.css" "${TARGET_DIR}/"
 cp -r "${SOURCE_DIR}/icons" "${TARGET_DIR}/"
