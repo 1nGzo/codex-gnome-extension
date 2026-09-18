@@ -432,8 +432,8 @@ const CodexUsageIndicator = GObject.registerClass(
             this._creditsItem = this._createValueMenuItem('Credits remaining');
             this._statusItem = this._createCenteredMessageItem();
 
+            this._fiveHourItem.item.visible = false;
             this.menu.addMenuItem(this._fiveHourItem.item);
-            this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
             this.menu.addMenuItem(this._weeklyItem.item);
             this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
@@ -459,10 +459,8 @@ const CodexUsageIndicator = GObject.registerClass(
         applySettings() {
             this._iconBin.visible = this._settings.get_boolean('show-icon');
 
-            const showCredits = this._settings.get_boolean('show-credits');
-
-            this._creditsItem.item.visible = showCredits;
-            this._creditsSeparator.visible = showCredits;
+            this._creditsItem.item.visible = false;
+            this._creditsSeparator.visible = false;
 
             const showBars = this._settings.get_boolean('show-progress-bars');
 
