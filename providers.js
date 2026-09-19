@@ -6,6 +6,7 @@ const UUID = 'codex-usage@almighty-shogun';
 const PROBE_TIMEOUT_SECONDS = 20;
 const MAX_BACKOFF_SECONDS = 3600;
 const ANTIGRAVITY_RETRIES = [5, 10, 20, 30, 60];
+const ANTIGRAVITY_IDLE_SECONDS = 30;
 const ANTIGRAVITY_ERRORS = new Set([
     'process unavailable', 'port unavailable', 'rpc unavailable', 'invalid quota response',
 ]);
@@ -282,7 +283,7 @@ export class UsageReader {
         if (this._probe) return;
 
         const interval = this._settings.get_int('limit-interval');
-        const due = Math.max(this._observedAt + interval, this._retryAt);
+        const due = this.failed ? this._retryAt : (this._observedAt + interval);
 
         if (nowInSeconds() < due) return;
 
@@ -334,14 +335,28 @@ export class UsageReader {
     }
 
     _accept(reading, interval, failure = null) {
+        const previousFailure = this.failureReason;
         this.failed = !reading;
         this.failureReason = this.provider.id === 'antigravity' && !reading
             ? (ANTIGRAVITY_ERRORS.has(failure) ? failure : 'rpc unavailable') : null;
         if (!reading) {
-            if (this.provider.id === 'antigravity' && ANTIGRAVITY_ERRORS.has(this.failureReason) &&
-                this._startupAttempts < ANTIGRAVITY_RETRIES.length) {
-                this._retryAt = nowInSeconds() + ANTIGRAVITY_RETRIES[this._startupAttempts++];
-                return;
+            if (this.provider.id === 'antigravity' && ANTIGRAVITY_ERRORS.has(this.failureReason)) {
+                const wasProcessUnavailable = previousFailure === 'process unavailable';
+                const isProcessUnavailable = this.failureReason === 'process unavailable';
+                if (wasProcessUnavailable !== isProcessUnavailable) {
+                    this._startupAttempts = 0;
+                    this._backoff = 0;
+                }
+                if (this._startupAttempts < ANTIGRAVITY_RETRIES.length) {
+                    this._retryAt = nowInSeconds() + ANTIGRAVITY_RETRIES[this._startupAttempts++];
+                    return;
+                }
+                if (isProcessUnavailable) {
+                    this._startupAttempts = ANTIGRAVITY_RETRIES.length + 1;
+                    this._backoff = 0;
+                    this._retryAt = nowInSeconds() + ANTIGRAVITY_IDLE_SECONDS;
+                    return;
+                }
             }
             this._backoff = Math.min(MAX_BACKOFF_SECONDS, Math.max(interval, this._backoff) * 2);
             this._retryAt = nowInSeconds() + this._backoff;
