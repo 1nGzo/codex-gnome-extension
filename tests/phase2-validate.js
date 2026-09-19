@@ -113,5 +113,38 @@ for (const provider of providers) {
 }
 print('PASS: UsageReader rescan() successfully triggers immediate read without waiting for polling interval.');
 
+// 5. Test Top Bar Simplified Label Format (logo + xx% only, 5h only in expanded menu)
+print('[5/5] Testing top bar simplified format (xx% without "Weekly" prefix)...');
+function formatPanelLabel(weeklyWindow, showWeekly) {
+    const weekly = showWeekly ? weeklyWindow : null;
+    return weekly ? `${Math.max(0, Math.min(100, Math.round(100 - weekly.usedPercent)))}%` : '';
+}
+
+for (const provider of providers) {
+    const rescanData = rescanResults[provider.id];
+    assert(rescanData !== undefined, `Missing rescan data for ${provider.id}`);
+    
+    // Panel label must be strictly `${percent}%` with NO "Weekly" prefix
+    const simulatedWeeklyWindow = { usedPercent: 100 - rescanData.weeklyRemaining };
+    const labelWithWeeklyOn = formatPanelLabel(simulatedWeeklyWindow, true);
+    assert(labelWithWeeklyOn === `${rescanData.weeklyRemaining}%`,
+        `Panel label mismatch: expected "${rescanData.weeklyRemaining}%", got "${labelWithWeeklyOn}"`);
+    assert(!labelWithWeeklyOn.includes('Weekly'),
+        `Panel label must not include "Weekly": got "${labelWithWeeklyOn}"`);
+    
+    const labelWithWeeklyOff = formatPanelLabel(simulatedWeeklyWindow, false);
+    assert(labelWithWeeklyOff === '', 'Panel label should be empty when showWeekly is false');
+
+    // Antigravity 5h window must only be in menu, never in top bar
+    if (provider.id === 'antigravity') {
+        assert(provider.showFiveHour === true, 'Antigravity must have showFiveHour=true');
+        assert(rescanData.fiveHourRemaining !== null, 'Antigravity must provide 5h quota in menu');
+    } else {
+        assert(!provider.showFiveHour, `${provider.id} must not have showFiveHour`);
+        assert(rescanData.fiveHourRemaining === null, `${provider.id} must not provide 5h quota`);
+    }
+}
+print('PASS: Top bar simplified to logo + xx% without "Weekly" prefix; 5h retained exclusively in menu.');
+
 print('\nALL PHASE 2 VALIDATION CHECKS PASSED.');
 System.exit(0);

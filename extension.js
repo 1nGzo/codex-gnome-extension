@@ -62,6 +62,8 @@ const CodexUsageIndicator = GObject.registerClass(
         _init(extension, settings, limits) {
             super._init(0.5, `${limits.provider.name} Usage`);
 
+            this.can_focus = false;
+
             this._extension = extension;
             this._settings = settings;
             this._limits = limits;
@@ -126,6 +128,11 @@ const CodexUsageIndicator = GObject.registerClass(
 
             this.menu.box.add_style_class_name('codex-usage-menu');
 
+            this.menu.connectObject('open-state-changed', (menu, isOpen) => {
+                if (!isOpen)
+                    this._onMenuClosed();
+            }, GObject.ConnectFlags.AFTER, this);
+
             this.applySettings();
 
             this._refreshTimeoutId = GLib.timeout_add_seconds(
@@ -154,7 +161,47 @@ const CodexUsageIndicator = GObject.registerClass(
                 this._refreshTimeoutId = null;
             }
 
+            if (this.menu) {
+                if (this.menu.isOpen)
+                    this.menu.close();
+                this.menu.disconnectObject(this);
+            }
+
+            const keyFocus = global.stage.get_key_focus();
+            if (keyFocus && (keyFocus === this || this.contains(keyFocus) || (this.menu && this.menu.actor.contains(keyFocus)))) {
+                global.stage.set_key_focus(null);
+                try {
+                    global.display.focus_default_window(global.get_current_time());
+                } catch (_error) {
+                    // Ignore if no default window is available
+                }
+            }
+
             super.destroy();
+        }
+
+        _onMenuClosed() {
+            const restoreFocus = () => {
+                if (Main.panel?.menuManager?.activeMenu)
+                    return;
+
+                const keyFocus = global.stage.get_key_focus();
+                if (!keyFocus || keyFocus === this || this.contains(keyFocus) || (this.menu && this.menu.actor.contains(keyFocus)) || (Main.panel && Main.panel.contains(keyFocus))) {
+                    global.stage.set_key_focus(null);
+                }
+                try {
+                    global.display.focus_default_window(global.get_current_time());
+                } catch (_error) {
+                    // Ignore if no default window is available
+                }
+            };
+
+            restoreFocus();
+            GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+                if (!this._destroyed)
+                    restoreFocus();
+                return GLib.SOURCE_REMOVE;
+            });
         }
 
         _refresh() {
@@ -333,7 +380,7 @@ const CodexUsageIndicator = GObject.registerClass(
 
         _formatPanelLabel(windows) {
             const weekly = this._settings.get_boolean('show-weekly') ? windows.weekly : null;
-            return weekly ? `Weekly ${this._formatRemainingUsage(weekly)}` : '';
+            return weekly ? this._formatRemainingUsage(weekly) : '';
         }
 
         _formatRemainingUsage(window) {

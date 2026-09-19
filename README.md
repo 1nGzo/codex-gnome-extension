@@ -7,7 +7,7 @@
 # Codex Usage GNOME Extension
 
 Phase 1 adds a fixed **Codex → Grok → Antigravity** sequence to the top bar.
-Each entry retains the minimal Codex layout: its logo and `Weekly N%` **remaining**.
+Each entry retains the minimal Codex layout: its logo and `N%` **remaining**.
 Each opens its own standard GNOME popup with weekly remaining, reset time and
 `Latest <provider> update`. Antigravity additionally shows 5-hour remaining **only
 in its popup**. The existing Codex logo, CSS, bar size and menu behavior are retained.
