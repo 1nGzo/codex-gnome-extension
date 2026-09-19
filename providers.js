@@ -5,6 +5,10 @@ import {parseCodex, parseGrok, usageWindow} from './usage.js';
 const UUID = 'codex-usage@almighty-shogun';
 const PROBE_TIMEOUT_SECONDS = 20;
 const MAX_BACKOFF_SECONDS = 3600;
+const ANTIGRAVITY_RETRIES = [5, 10, 20, 30, 60];
+const ANTIGRAVITY_ERRORS = new Set([
+    'process unavailable', 'port unavailable', 'rpc unavailable', 'invalid quota response',
+]);
 const CACHE_VERSION = 1;
 const HANDSHAKE_REQUEST_ID = 1;
 const RATE_LIMITS_REQUEST_ID = 2;
@@ -39,13 +43,13 @@ export function createProviders(extensionPath) {
 
 function probeAntigravity(extensionPath, onDone) {
     const python = GLib.find_program_in_path('python3');
-    if (!python) { onDone(null); return null; }
+    if (!python) { onDone(null, 'rpc unavailable'); return null; }
     let process;
     try {
         process = Gio.Subprocess.new([python, `${extensionPath}/read-antigravity.py`],
             Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE);
     } catch {
-        onDone(null);
+        onDone(null, 'rpc unavailable');
         return null;
     }
     const cancellable = new Gio.Cancellable();
@@ -58,10 +62,10 @@ function probeAntigravity(extensionPath, onDone) {
         cancellable.cancel();
         try { process.force_exit(); } catch { /* Already exited. */ }
     };
-    const finish = reading => {
+    const finish = (reading, failure = 'rpc unavailable') => {
         if (settled) return;
         stop();
-        onDone(reading);
+        onDone(reading, reading ? null : failure);
     };
     timeoutId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, PROBE_TIMEOUT_SECONDS, () => {
         timeoutId = 0;
@@ -71,11 +75,16 @@ function probeAntigravity(extensionPath, onDone) {
     process.communicate_utf8_async(null, cancellable, (source, result) => {
         if (settled) return;
         let reading = null;
+        let failure = 'rpc unavailable';
         try {
             const [, stdout] = source.communicate_utf8_finish(result);
-            if (source.get_successful()) reading = JSON.parse(stdout);
+            const payload = JSON.parse(stdout);
+            if (source.get_successful() && Array.isArray(payload?.windows) && payload.windows.length)
+                reading = payload;
+            else if (ANTIGRAVITY_ERRORS.has(payload?.error)) failure = payload.error;
+            else failure = 'invalid quota response';
         } catch { /* No valid reading. */ }
-        finish(reading);
+        finish(reading, failure);
     });
     return {cancel: stop};
 }
@@ -238,6 +247,9 @@ export class UsageReader {
         this._windows = [];
         this._retryAt = 0;
         this._backoff = 0;
+        this._startupAttempts = 0;
+        this._retryTimer = 0;
+        this.failureReason = null;
         this._probe = null;
 
         this._load();
@@ -267,28 +279,50 @@ export class UsageReader {
 
         if (nowInSeconds() < due) return;
 
-        this._probe = this.provider.probe(reading => {
+        if (this._retryTimer) GLib.Source.remove(this._retryTimer);
+        this._retryTimer = 0;
+        this._probe = this.provider.probe((reading, failure) => {
             this._probe = null;
 
-            this._accept(reading, interval);
+            this._accept(reading, interval, failure);
+            if (this.provider.id === 'antigravity' && this.failed && this._startupAttempts <= ANTIGRAVITY_RETRIES.length &&
+                ANTIGRAVITY_ERRORS.has(this.failureReason) && this._backoff === 0) {
+                // The panel polls every 30s; its cadence cannot drive 5s retries.
+                this._retryTimer = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT,
+                    Math.max(1, this._retryAt - nowInSeconds()), () => {
+                        this._retryTimer = 0;
+                        this.poll(onReading);
+                        return GLib.SOURCE_REMOVE;
+                    });
+            }
             onReading();
         });
     }
 
     destroy() {
+        if (this._retryTimer) GLib.Source.remove(this._retryTimer);
+        this._retryTimer = 0;
         this._probe?.cancel();
         this._probe = null;
     }
 
-    _accept(reading, interval) {
+    _accept(reading, interval, failure = null) {
         this.failed = !reading;
+        this.failureReason = this.provider.id === 'antigravity' && !reading
+            ? (ANTIGRAVITY_ERRORS.has(failure) ? failure : 'rpc unavailable') : null;
         if (!reading) {
+            if (this.provider.id === 'antigravity' && ANTIGRAVITY_ERRORS.has(this.failureReason) &&
+                this._startupAttempts < ANTIGRAVITY_RETRIES.length) {
+                this._retryAt = nowInSeconds() + ANTIGRAVITY_RETRIES[this._startupAttempts++];
+                return;
+            }
             this._backoff = Math.min(MAX_BACKOFF_SECONDS, Math.max(interval, this._backoff) * 2);
             this._retryAt = nowInSeconds() + this._backoff;
 
             return;
         }
 
+        this._startupAttempts = 0;
         this._observedAt = nowInSeconds();
         this._windows = reading.windows;
         this._backoff = 0;

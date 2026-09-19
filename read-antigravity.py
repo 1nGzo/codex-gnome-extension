@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Read quota from the running default Antigravity profile, without exporting auth.
 
-The CSRF token stays in this short-lived process. Only normalized quota is printed.
+The CSRF token stays in this short-lived process. Only normalized quota or a fixed failure category is printed.
 No login, account switching, remote credential requests, or session reads.
 """
 import datetime
@@ -10,6 +10,10 @@ import json
 import os
 from pathlib import Path
 import sys
+
+
+class Unavailable(Exception):
+    pass
 
 
 def arguments(pid):
@@ -59,7 +63,7 @@ def local_server():
             continue
     # An ambiguous default instance is unavailable, never an arbitrary account.
     if len(candidates) != 1:
-        raise ValueError('Default Antigravity instance unavailable or ambiguous')
+        raise Unavailable('process unavailable')
     return candidates[0]
 
 
@@ -113,8 +117,18 @@ def normalize(summary):
 
 
 def read():
-    path, token = local_server()
-    for port in ports(path):
+    try:
+        path, token = local_server()
+    except OSError:
+        raise Unavailable('process unavailable') from None
+    try:
+        discovered = ports(path)
+    except OSError:
+        discovered = []
+    if not discovered:
+        raise Unavailable('port unavailable')
+    failure = 'rpc unavailable'
+    for port in discovered:
         connection = http.client.HTTPConnection('127.0.0.1', port, timeout=3)
         try:
             connection.request('POST',
@@ -123,18 +137,24 @@ def read():
                 headers={'Content-Type': 'application/json', 'x-codeium-csrf-token': token})
             response = connection.getresponse()
             if response.status == 200:
-                return normalize(json.loads(response.read(1024 * 1024))['response'])
+                try:
+                    return normalize(json.loads(response.read(1024 * 1024))['response'])
+                except (ValueError, KeyError, TypeError, AttributeError, OverflowError):
+                    failure = 'invalid quota response'
         except (OSError, ValueError, KeyError, TypeError, http.client.HTTPException):
             continue
         finally:
             connection.close()
-    raise ValueError('Quota endpoint unavailable')
+    raise Unavailable(failure)
 
 
 if __name__ == '__main__':
     try:
         print(json.dumps(read(), allow_nan=False))
+    except Unavailable as error:
+        print(json.dumps({'error': str(error)}))
+        sys.exit(1)
     except Exception:
         # Never echo process arguments, tokens, account identity or raw responses.
-        print('null')
+        print(json.dumps({'error': 'rpc unavailable'}))
         sys.exit(1)
