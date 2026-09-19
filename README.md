@@ -78,11 +78,14 @@ gnome-extensions prefs codex-usage@almighty-shogun
 | Panel box | Right | Which section of the top bar holds the indicator |
 | Position in box | 0 | Order within that box; `0` is first, `-1` is last, lower negatives count back from the end |
 | Show icon | On | Draw each provider logo beside the percentage |
-| Show 5-hour window | On | Legacy setting; Phase 1 keeps the panel weekly-only |
+| Show 5-hour window | On | Legacy setting; keeps the panel weekly-only |
 | Show weekly window | On | Include the 7-day figure in the panel label |
 | Show credits remaining | On | Legacy setting; the minimal menus omit credits |
 | Show progress bars | On | Draw a usage bar under each window in the menu |
-| Use 24-hour times | Off | Render `19:50` rather than `7:50 PM` |
+| Show Codex | On | Show Codex usage indicator in the top bar |
+| Show Grok | On | Show Grok usage indicator in the top bar |
+| Show Antigravity | On | Show Antigravity usage indicator in the top bar |
+| Use 24-hour times | On | Render `19:50` (24-hour time is standard across all locales) |
 | Seconds between reads | 300 | How often each provider is asked for limits, from 60 to 3600 |
 
 Clutter appends on any negative index, so `-2` would otherwise be identical to `-1`. Values past `-1` are instead resolved against the box's contents when the indicator is inserted, making `-2` the second-to-last slot, `-3` the third-to-last and so on, clamped to the start of the box.

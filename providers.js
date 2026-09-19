@@ -41,6 +41,13 @@ export function createProviders(extensionPath) {
     });
 }
 
+export function detectProvider(provider, onDone) {
+    return provider.probe((reading, failure) => {
+        const available = Boolean(reading && Array.isArray(reading.windows) && reading.windows.length > 0);
+        onDone(available, failure);
+    });
+}
+
 function probeAntigravity(extensionPath, onDone) {
     const python = GLib.find_program_in_path('python3');
     if (!python) { onDone(null, 'rpc unavailable'); return null; }
@@ -296,6 +303,26 @@ export class UsageReader {
                     });
             }
             onReading();
+        });
+    }
+
+    rescan(onReading) {
+        if (this._probe) {
+            this._probe.cancel();
+            this._probe = null;
+        }
+        if (this._retryTimer) {
+            GLib.Source.remove(this._retryTimer);
+            this._retryTimer = 0;
+        }
+        this._retryAt = 0;
+        this._backoff = 0;
+        this._startupAttempts = 0;
+        const interval = this._settings.get_int('limit-interval');
+        this._probe = this.provider.probe((reading, failure) => {
+            this._probe = null;
+            this._accept(reading, interval, failure);
+            onReading?.();
         });
     }
 

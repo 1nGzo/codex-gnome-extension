@@ -52,8 +52,26 @@
             <description>Draw a usage bar under each window in the popup.</description>
         </key>
 
+        <key name="show-provider-codex" type="b">
+            <default>true</default>
+            <summary>Show Codex in the panel</summary>
+            <description>Show Codex usage in the top bar.</description>
+        </key>
+
+        <key name="show-provider-grok" type="b">
+            <default>true</default>
+            <summary>Show Grok in the panel</summary>
+            <description>Show Grok usage in the top bar.</description>
+        </key>
+
+        <key name="show-provider-antigravity" type="b">
+            <default>true</default>
+            <summary>Show Antigravity in the panel</summary>
+            <description>Show Antigravity usage in the top bar.</description>
+        </key>
+
         <key name="use-24-hour-time" type="b">
-            <default>false</default>
+            <default>true</default>
             <summary>Use 24-hour times</summary>
             <description>Render reset and update times as 19:50 rather than 7:50 PM.</description>
         </key>

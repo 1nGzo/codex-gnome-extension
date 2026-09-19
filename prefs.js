@@ -3,15 +3,79 @@ import Gtk from 'gi://Gtk';
 import Adw from 'gi://Adw';
 
 import { ExtensionPreferences } from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
+import { createProviders, detectProvider } from './providers.js';
 
 export default class CodexUsagePreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
         const settings = this.getSettings();
+        const providers = createProviders(this.path);
 
         const page = new Adw.PreferencesPage({
             title: 'Codex Usage',
             icon_name: 'preferences-system-symbolic'
         });
+
+        const providersGroup = new Adw.PreferencesGroup({
+            title: 'Providers',
+            description: 'Choose which AI providers to show in the top bar.'
+        });
+
+        const rescanButton = new Gtk.Button({
+            label: 'Re-scan',
+            valign: Gtk.Align.CENTER
+        });
+        providersGroup.set_header_suffix(rescanButton);
+
+        const providerRows = new Map();
+        for (const provider of providers) {
+            const row = new Adw.SwitchRow({
+                title: provider.name,
+                subtitle: 'Checking availability...'
+            });
+
+            try {
+                row.add_prefix(new Gtk.Image({
+                    gicon: new Gio.FileIcon({
+                        file: Gio.File.new_for_path(`${this.path}/icons/${provider.icon}`)
+                    }),
+                    pixel_size: 24
+                }));
+            } catch {
+                // If icon load fails, row remains functional.
+            }
+
+            settings.bind(`show-provider-${provider.id}`, row, 'active', Gio.SettingsBindFlags.DEFAULT);
+            providersGroup.add(row);
+            providerRows.set(provider.id, row);
+        }
+
+        let activeProbes = [];
+        const scanAll = () => {
+            for (const probe of activeProbes) probe?.cancel?.();
+            activeProbes = [];
+
+            rescanButton.sensitive = false;
+            let pending = providers.length;
+
+            for (const provider of providers) {
+                const row = providerRows.get(provider.id);
+                if (row) row.subtitle = 'Checking availability...';
+
+                const probe = detectProvider(provider, (available) => {
+                    if (row) {
+                        row.subtitle = available ? 'Available' : 'Not detected';
+                    }
+                    pending--;
+                    if (pending <= 0) {
+                        rescanButton.sensitive = true;
+                    }
+                });
+                if (probe) activeProbes.push(probe);
+            }
+        };
+
+        rescanButton.connect('clicked', () => scanAll());
+        scanAll();
 
         const panelGroup = new Adw.PreferencesGroup({
             title: 'Panel',
@@ -94,16 +158,8 @@ export default class CodexUsagePreferences extends ExtensionPreferences {
 
         settings.bind('show-progress-bars', barsRow, 'active', Gio.SettingsBindFlags.DEFAULT);
 
-        const clockRow = new Adw.SwitchRow({
-            title: 'Use 24-hour times',
-            subtitle: 'Show 19:50 rather than 7:50 PM'
-        });
-
-        settings.bind('use-24-hour-time', clockRow, 'active', Gio.SettingsBindFlags.DEFAULT);
-
         menuGroup.add(creditsRow);
         menuGroup.add(barsRow);
-        menuGroup.add(clockRow);
 
         const usageGroup = new Adw.PreferencesGroup({
             title: 'Usage',
@@ -128,6 +184,7 @@ export default class CodexUsagePreferences extends ExtensionPreferences {
 
         usageGroup.add(intervalRow);
 
+        page.add(providersGroup);
         page.add(panelGroup);
         page.add(menuGroup);
         page.add(usageGroup);

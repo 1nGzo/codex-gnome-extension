@@ -25,7 +25,10 @@ const PANEL_BOXES = {
 
 const REBUILD_KEYS = [
     'panel-position',
-    'panel-index'
+    'panel-index',
+    'show-provider-codex',
+    'show-provider-grok',
+    'show-provider-antigravity'
 ];
 
 const APPEARANCE_KEYS = [
@@ -33,8 +36,7 @@ const APPEARANCE_KEYS = [
     'show-five-hour',
     'show-weekly',
     'show-credits',
-    'show-progress-bars',
-    'use-24-hour-time'
+    'show-progress-bars'
 ];
 
 function clampPercent(value) {
@@ -113,6 +115,14 @@ const CodexUsageIndicator = GObject.registerClass(
 
 
             this.menu.addMenuItem(this._statusItem.item);
+            this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+
+            this._rescanItem = new PopupMenu.PopupMenuItem('Re-scan');
+            this._rescanItem.connect('activate', () => {
+                this._statusItem.label.text = `Scanning ${this._provider.name}...`;
+                this._limits.rescan(() => this._renderSafely());
+            });
+            this.menu.addMenuItem(this._rescanItem);
 
             this.menu.box.add_style_class_name('codex-usage-menu');
 
@@ -353,7 +363,7 @@ const CodexUsageIndicator = GObject.registerClass(
         }
 
         _timeFormat() {
-            return this._settings.get_boolean('use-24-hour-time') ? '%H:%M' : '%-I:%M %p';
+            return '%H:%M';
         }
 
         _formatStatusLine(observedAt) {
@@ -412,13 +422,24 @@ export default class CodexUsageExtension extends Extension {
     _build() {
         const position = this._settings.get_string('panel-position');
         const index = this._resolveIndex(this._settings.get_int('panel-index'), position);
-        this._indicators = this._readers.map((reader, offset) => {
+        this._indicators = [];
+
+        let offset = 0;
+        for (const reader of this._readers) {
+            const key = `show-provider-${reader.provider.id}`;
+            if (!this._settings.get_boolean(key)) continue;
+
             const indicator = new CodexUsageIndicator(this, this._settings, reader);
+            const role = reader.provider.id === 'codex' ? this.uuid : `${this.uuid}-${reader.provider.id}`;
             Main.panel.addToStatusArea(
-                offset === 0 ? this.uuid : `${this.uuid}-${reader.provider.id}`,
-                indicator, index < 0 ? index : index + offset, position);
-            return indicator;
-        });
+                role,
+                indicator,
+                index < 0 ? index : index + offset,
+                position
+            );
+            this._indicators.push(indicator);
+            offset++;
+        }
     }
 
     _resolveIndex(index, position) {
