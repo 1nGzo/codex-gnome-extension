@@ -42,6 +42,13 @@
     margin-top: 6px;
 }
 
+.codex-usage-section-countdown {
+    font-size: 0.85em;
+    opacity: 0.60;
+    text-align: left;
+    margin-top: 2px;
+}
+
 .codex-usage-progress-track {
     width: 220px;
     height: 8px;

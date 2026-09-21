@@ -129,7 +129,9 @@ const CodexUsageIndicator = GObject.registerClass(
             this.menu.box.add_style_class_name('codex-usage-menu');
 
             this.menu.connectObject('open-state-changed', (menu, isOpen) => {
-                if (!isOpen)
+                if (isOpen)
+                    this._renderSafely();
+                else
                     this._onMenuClosed();
             }, GObject.ConnectFlags.AFTER, this);
 
@@ -320,10 +322,19 @@ const CodexUsageIndicator = GObject.registerClass(
                 style_class: 'codex-usage-section-reset'
             });
 
+            const countdownLabel = new St.Label({
+                text: '',
+                visible: false,
+                x_expand: true,
+                x_align: Clutter.ActorAlign.START,
+                style_class: 'codex-usage-section-countdown'
+            });
+
             layout.add_child(titleLabel);
             layout.add_child(valueLabel);
             layout.add_child(barTrack);
             layout.add_child(resetLabel);
+            layout.add_child(countdownLabel);
 
             item.add_child(layout);
 
@@ -334,7 +345,8 @@ const CodexUsageIndicator = GObject.registerClass(
                 valueLabel,
                 barTrack,
                 barFill,
-                resetLabel
+                resetLabel,
+                countdownLabel
             };
         }
 
@@ -352,6 +364,8 @@ const CodexUsageIndicator = GObject.registerClass(
             if (window.label) entry.titleLabel.text += `\nMost used: ${window.label}`;
             entry.valueLabel.text = `${remainingPercent}% remaining`;
             entry.resetLabel.text = this._formatReset(window.resetsAt);
+            entry.countdownLabel.text = this._formatResetCountdown(window.resetsAt);
+            entry.countdownLabel.visible = entry.countdownLabel.text !== '';
 
             const fillWidth = usedPercent === 0
                 ? 0
@@ -372,6 +386,8 @@ const CodexUsageIndicator = GObject.registerClass(
             entry.titleLabel.text = entry.title;
             entry.valueLabel.text = 'Not reported';
             entry.resetLabel.text = 'Reset time unavailable';
+            entry.countdownLabel.text = '';
+            entry.countdownLabel.visible = false;
 
             entry.barFill.set_width(0);
             entry.barFill.remove_style_pseudo_class('warning');
@@ -401,6 +417,24 @@ const CodexUsageIndicator = GObject.registerClass(
             if (this._isToday(date)) return `Resets at ${time}`;
 
             return `Resets ${date.format('%B %-d')} at ${time}`;
+        }
+
+        _formatResetCountdown(resetSeconds) {
+            const seconds = Number(resetSeconds);
+            if (!Number.isFinite(seconds) || seconds <= 0) return '';
+
+            const remainingSeconds = seconds - Date.now() / 1000;
+            if (remainingSeconds <= 0) return 'Reset pending';
+
+            const minutes = Math.floor(remainingSeconds / 60);
+            const hours = Math.floor(minutes / MINUTES_PER_HOUR);
+            if (minutes >= MINUTES_PER_DAY)
+                return `${Math.floor(minutes / MINUTES_PER_DAY)}d ${hours % 24}h remaining`;
+            if (minutes >= MINUTES_PER_HOUR)
+                return `${hours}h ${minutes % MINUTES_PER_HOUR}m remaining`;
+
+            // A future reset should never look expired just because seconds are hidden.
+            return `${Math.max(1, minutes)}m remaining`;
         }
 
         _isToday(date) {
