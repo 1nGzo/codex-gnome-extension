@@ -38,7 +38,7 @@ export function parseGrok(result) {
     const period = config.currentPeriod;
     // Monthly billing is not weekly usage, even if it reports a percentage.
     const weekly = period?.type === 'USAGE_PERIOD_TYPE_WEEKLY'
-        ? usageWindow(config.creditUsagePercent, WEEKLY_WINDOW_MINUTES,
+        ? usageWindow(config.creditUsagePercent ?? 0, WEEKLY_WINDOW_MINUTES,
             Date.parse(period.end) / 1000) : null;
     return {windows: weekly ? [weekly] : []};
 }
