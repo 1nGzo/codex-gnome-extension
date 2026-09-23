@@ -105,17 +105,20 @@ const CodexUsageIndicator = GObject.registerClass(
 
             this.add_child(box);
 
+            this._usageSection = new PopupMenu.PopupMenuSection();
+            this.menu.addMenuItem(this._usageSection);
+
             this._fiveHourItem = this._createUsageMenuItem('5-hour usage limit');
             this._weeklyItem = this._createUsageMenuItem('Weekly usage limit');
             this._statusItem = this._createCenteredMessageItem();
 
-            this._fiveHourItem.item.visible = this._provider.showFiveHour === true;
-            this.menu.addMenuItem(this._fiveHourItem.item);
+            if (this._provider.id !== 'antigravity') {
+                this._fiveHourItem.item.visible = this._provider.showFiveHour === true;
+                this._usageSection.addMenuItem(this._fiveHourItem.item);
+                this._usageSection.addMenuItem(this._weeklyItem.item);
+            }
 
-            this.menu.addMenuItem(this._weeklyItem.item);
             this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-
-
             this.menu.addMenuItem(this._statusItem.item);
             this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
@@ -229,6 +232,11 @@ const CodexUsageIndicator = GObject.registerClass(
         }
 
         _render() {
+            if (this._provider.id === 'antigravity' && Array.isArray(this._limits.profiles) && this._limits.profiles.length > 0) {
+                this._renderAntigravityProfiles();
+                return;
+            }
+
             if (!this._limits.hasReading) {
                 if (this._limits.busy && this._label.text === `Loading ${this._provider.name} usage...`) return;
 
@@ -253,7 +261,84 @@ const CodexUsageIndicator = GObject.registerClass(
 
             this._setUsageMenuItem(this._fiveHourItem, windows.fiveHour);
             this._setUsageMenuItem(this._weeklyItem, windows.weekly);
+        }
 
+        _renderAntigravityProfiles() {
+            const profiles = this._limits.profiles;
+            const windowsHidden = !this._settings.get_boolean('show-weekly');
+            const defaultProfile = profiles.find(p => p.id === 'default') ?? profiles[0];
+            const defaultWindows = defaultProfile?.windows ? assignWindows(defaultProfile.windows) : {fiveHour: null, weekly: null};
+            const labelText = this._formatPanelLabel(defaultWindows);
+
+            if (defaultProfile?.status === 'online' && defaultWindows.weekly) {
+                this._label.text = labelText === '' && !windowsHidden ? 'Usage unavailable' : labelText;
+            } else {
+                this._label.text = 'Usage unavailable';
+            }
+            this._label.visible = this._label.text !== '';
+
+            this._statusItem.label.text = this._formatStatusLine(this._limits.observedAt);
+
+            this._usageSection.removeAll();
+            const showBars = this._settings.get_boolean('show-progress-bars');
+
+            profiles.forEach((profile, index) => {
+                if (index > 0) {
+                    this._usageSection.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+                }
+
+                const header = this._createProfileHeaderItem(profile.name);
+                this._usageSection.addMenuItem(header.item);
+
+                if (profile.status === 'online' && Array.isArray(profile.windows) && profile.windows.length > 0) {
+                    const wins = assignWindows(profile.windows);
+                    if (wins.weekly) {
+                        const weeklyItem = this._createUsageMenuItem('Weekly usage limit');
+                        weeklyItem.barTrack.visible = showBars;
+                        this._setUsageMenuItem(weeklyItem, wins.weekly);
+                        this._usageSection.addMenuItem(weeklyItem.item);
+                    }
+                    if (this._provider.showFiveHour && wins.fiveHour) {
+                        const fiveHourItem = this._createUsageMenuItem('5-hour usage limit');
+                        fiveHourItem.barTrack.visible = showBars;
+                        this._setUsageMenuItem(fiveHourItem, wins.fiveHour);
+                        this._usageSection.addMenuItem(fiveHourItem.item);
+                    }
+                } else {
+                    const offlineItem = this._createOfflineItem();
+                    this._usageSection.addMenuItem(offlineItem.item);
+                }
+            });
+        }
+
+        _createProfileHeaderItem(title) {
+            const item = new PopupMenu.PopupBaseMenuItem({
+                reactive: false,
+                can_focus: false,
+            });
+            const label = new St.Label({
+                text: title,
+                x_expand: true,
+                x_align: Clutter.ActorAlign.START,
+                style_class: 'codex-usage-profile-title',
+            });
+            item.add_child(label);
+            return {item, label};
+        }
+
+        _createOfflineItem() {
+            const item = new PopupMenu.PopupBaseMenuItem({
+                reactive: false,
+                can_focus: false,
+            });
+            const label = new St.Label({
+                text: 'Detected · Offline',
+                x_expand: true,
+                x_align: Clutter.ActorAlign.START,
+                style_class: 'codex-usage-offline-label',
+            });
+            item.add_child(label);
+            return {item, label};
         }
 
         _createCenteredMessageItem(styleClass = 'codex-usage-status-label') {

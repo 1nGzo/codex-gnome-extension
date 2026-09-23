@@ -61,3 +61,20 @@
     border-radius: 20px;
     background-color: #7dd3a7;
 }
+
+.codex-usage-profile-title {
+    font-size: 1.05em;
+    font-weight: 700;
+    opacity: 0.88;
+    text-align: left;
+    margin-top: 4px;
+    margin-bottom: 2px;
+}
+
+.codex-usage-offline-label {
+    font-size: 0.95em;
+    opacity: 0.65;
+    text-align: left;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}

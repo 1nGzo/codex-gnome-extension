@@ -9,20 +9,36 @@ spec.loader.exec_module(a)
 
 class Failures(unittest.TestCase):
     def test_categories(self):
-        with patch.object(a, 'local_server', side_effect=a.Unavailable('process unavailable')):
-            with self.assertRaisesRegex(a.Unavailable, '^process unavailable$'): a.read()
-        with patch.object(a, 'local_server', return_value=(Path('/unused'), 'fixture-only')):
-            with patch.object(a, 'ports', return_value=[]):
-                with self.assertRaisesRegex(a.Unavailable, '^port unavailable$'): a.read()
-            with patch.object(a, 'ports', return_value=[12345]):
-                with patch.object(a.http.client, 'HTTPConnection') as factory:
-                    response = factory.return_value.getresponse.return_value
-                    response.status = 404
-                    with self.assertRaisesRegex(a.Unavailable, '^rpc unavailable$'): a.read()
-                    response.status = 200
-                    response.read.return_value = b'{"response":{"groups":[]}}'
-                    with self.assertRaisesRegex(a.Unavailable, '^invalid quota response$'): a.read()
-                    response.read.return_value = b'{"response":null}'
-                    with self.assertRaisesRegex(a.Unavailable, '^invalid quota response$'): a.read()
+        # When no profiles have auth and no servers running
+        with patch.object(a, 'discover_profiles', return_value=[]):
+            with patch.object(a, 'discover_running_servers', return_value={}):
+                with self.assertRaisesRegex(a.Unavailable, '^process unavailable$'):
+                    a.read()
+
+        # Test query_quota failures
+        with patch.object(a, 'ports', return_value=[]):
+            quota, err = a.query_quota(Path('/unused'), 'fixture-only')
+            self.assertIsNone(quota)
+            self.assertEqual(err, 'port unavailable')
+
+        with patch.object(a, 'ports', return_value=[12345]):
+            with patch.object(a.http.client, 'HTTPConnection') as factory:
+                response = factory.return_value.getresponse.return_value
+
+                response.status = 404
+                quota, err = a.query_quota(Path('/unused'), 'fixture-only')
+                self.assertIsNone(quota)
+                self.assertEqual(err, 'rpc unavailable')
+
+                response.status = 200
+                response.read.return_value = b'{"response":{"groups":[]}}'
+                quota, err = a.query_quota(Path('/unused'), 'fixture-only')
+                self.assertIsNone(quota)
+                self.assertEqual(err, 'invalid quota response')
+
+                response.read.return_value = b'{"response":null}'
+                quota, err = a.query_quota(Path('/unused'), 'fixture-only')
+                self.assertIsNone(quota)
+                self.assertEqual(err, 'invalid quota response')
 
 unittest.main()

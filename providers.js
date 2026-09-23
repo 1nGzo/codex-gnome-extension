@@ -44,7 +44,10 @@ export function createProviders(extensionPath) {
 
 export function detectProvider(provider, onDone) {
     return provider.probe((reading, failure) => {
-        const available = Boolean(reading && Array.isArray(reading.windows) && reading.windows.length > 0);
+        const available = Boolean(reading && (
+            (Array.isArray(reading.windows) && reading.windows.length > 0) ||
+            (Array.isArray(reading.profiles) && reading.profiles.length > 0)
+        ));
         onDone(available, failure);
     });
 }
@@ -87,7 +90,10 @@ function probeAntigravity(extensionPath, onDone) {
         try {
             const [, stdout] = source.communicate_utf8_finish(result);
             const payload = JSON.parse(stdout);
-            if (source.get_successful() && Array.isArray(payload?.windows) && payload.windows.length)
+            if (source.get_successful() && (
+                (Array.isArray(payload?.windows) && payload.windows.length) ||
+                (Array.isArray(payload?.profiles) && payload.profiles.length)
+            ))
                 reading = payload;
             else if (ANTIGRAVITY_ERRORS.has(payload?.error)) failure = payload.error;
             else failure = 'invalid quota response';
@@ -253,6 +259,7 @@ export class UsageReader {
         this._path = GLib.build_filenamev([GLib.get_user_cache_dir(), UUID, provider.id === 'codex' ? 'limits.json' : `${provider.id}-limits.json`]);
         this._observedAt = 0;
         this._windows = [];
+        this._profiles = [];
         this._retryAt = 0;
         this._backoff = 0;
         this._startupAttempts = 0;
@@ -269,6 +276,10 @@ export class UsageReader {
 
     get windows() {
         return this._windows;
+    }
+
+    get profiles() {
+        return this._profiles;
     }
 
     get hasReading() {
@@ -366,7 +377,8 @@ export class UsageReader {
 
         this._startupAttempts = 0;
         this._observedAt = nowInSeconds();
-        this._windows = reading.windows;
+        this._windows = reading.windows ?? [];
+        this._profiles = reading.profiles ?? [];
         this._backoff = 0;
         this._retryAt = 0;
 
@@ -395,6 +407,7 @@ export class UsageReader {
         this._observedAt = Number(cached.observed_at) || 0;
         this._windows = Array.isArray(cached.windows)
             ? cached.windows.map(w => usageWindow(w.usedPercent, w.windowMinutes, w.resetsAt, w.label)).filter(Boolean) : [];
+        this._profiles = Array.isArray(cached.profiles) ? cached.profiles : [];
     }
 
     _save() {
@@ -404,7 +417,8 @@ export class UsageReader {
             GLib.file_set_contents(this._path, JSON.stringify({
                 version: CACHE_VERSION,
                 observed_at: this._observedAt,
-                windows: this._windows
+                windows: this._windows,
+                profiles: this._profiles,
             }));
         } catch (error) {
             log(`${UUID}: Failed to write ${this._path}: ${error.message}`);
