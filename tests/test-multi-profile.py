@@ -18,7 +18,7 @@ class TestMultiProfileDiscovery(unittest.TestCase):
         ]
         self.sample_quota_a = {
             'windows': [
-                {'usedPercent': 30.0, 'windowMinutes': 10080, 'resetsAt': 1790000000, 'label': 'Claude and GPT models'},
+                {'usedPercent': 30.0, 'windowMinutes': 10080, 'resetsAt': 1790000000, 'label': 'Gemini Models'},
                 {'usedPercent': 10.0, 'windowMinutes': 300, 'resetsAt': 1790001000, 'label': 'Gemini Models'},
             ]
         }

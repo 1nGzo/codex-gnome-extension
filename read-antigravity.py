@@ -156,32 +156,72 @@ def ports(path):
     return sorted(found)
 
 
+def is_gemini_group(group):
+    if not isinstance(group, dict):
+        return False
+    # Check stable machine identifiers in buckets first
+    buckets = group.get('buckets')
+    if isinstance(buckets, list):
+        for b in buckets:
+            if isinstance(b, dict):
+                bucket_id = str(b.get('bucketId', '')).strip().lower()
+                if bucket_id.startswith('gemini'):
+                    return True
+                if bucket_id.startswith('3p'):
+                    return False
+    # Fallback to group display name only when bucketId is inconclusive
+    display_name = str(group.get('displayName', '')).strip().lower()
+    if 'gemini' in display_name and 'claude' not in display_name and 'gpt' not in display_name:
+        return True
+    return False
+
+
 def normalize(summary):
     groups = summary.get('groups')
     if not isinstance(groups, list) or not groups:
         raise ValueError('Quota groups unavailable')
+
+    # Target: identify and use exclusively the Gemini Models group
+    gemini_group = None
+    for group in groups:
+        if is_gemini_group(group):
+            gemini_group = group
+            break
+
+    if not gemini_group:
+        raise ValueError('Gemini quota unavailable')
+
+    buckets = gemini_group.get('buckets')
+    if not isinstance(buckets, list) or not buckets:
+        raise ValueError('Quota buckets unavailable')
+
     windows = []
     now = datetime.datetime.now(datetime.timezone.utc).timestamp()
     for kind, minutes in [('weekly', 10080), ('5h', 300)]:
-        readings = []
-        for group in groups:
-            for bucket in group.get('buckets', []):
-                if bucket.get('window') != kind:
-                    continue
-                remaining = bucket.get('remainingFraction')
-                if type(remaining) not in (int, float) or not 0 <= remaining <= 1:
-                    raise ValueError('Invalid quota fraction')
-                reset = datetime.datetime.fromisoformat(bucket['resetTime'].replace('Z', '+00:00')).timestamp()
-                if reset <= now:
-                    raise ValueError('Expired quota response')
-                readings.append({
-                    'usedPercent': (1 - remaining) * 100,
-                    'windowMinutes': minutes,
-                    'resetsAt': reset,
-                    'label': str(group.get('displayName', 'Model group'))[:120],
-                })
-        if readings:
-            windows.append(max(readings, key=lambda w: w['usedPercent']))
+        matching_bucket = None
+        for bucket in buckets:
+            if not isinstance(bucket, dict):
+                continue
+            if bucket.get('window') == kind or bucket.get('bucketId') == f'gemini-{kind}':
+                matching_bucket = bucket
+                break
+        if matching_bucket:
+            remaining = matching_bucket.get('remainingFraction')
+            if type(remaining) not in (int, float) or not 0 <= remaining <= 1:
+                raise ValueError('Invalid quota fraction')
+            reset_time_str = matching_bucket.get('resetTime')
+            if not reset_time_str:
+                raise ValueError('Missing reset time')
+            reset = datetime.datetime.fromisoformat(reset_time_str.replace('Z', '+00:00')).timestamp()
+            if reset <= now:
+                raise ValueError('Expired quota response')
+            windows.append({
+                'usedPercent': (1 - remaining) * 100,
+                'windowMinutes': minutes,
+                'resetsAt': reset,
+                'label': str(gemini_group.get('displayName', 'Gemini Models'))[:120],
+            })
+
     if not windows:
         raise ValueError('Quota windows unavailable')
     return {'windows': windows}
@@ -236,8 +276,8 @@ def read():
         if server_candidate:
             proc_path, token = server_candidate
             quota, err = query_quota(proc_path, token)
+            has_any_online = True
             if quota:
-                has_any_online = True
                 profile_entry = {
                     'id': p['id'],
                     'name': p['name'],

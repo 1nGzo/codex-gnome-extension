@@ -290,19 +290,24 @@ const CodexUsageIndicator = GObject.registerClass(
                 const header = this._createProfileHeaderItem(profile.name);
                 this._usageSection.addMenuItem(header.item);
 
-                if (profile.status === 'online' && Array.isArray(profile.windows) && profile.windows.length > 0) {
-                    const wins = assignWindows(profile.windows);
-                    if (wins.weekly) {
-                        const weeklyItem = this._createUsageMenuItem('Weekly usage limit');
-                        weeklyItem.barTrack.visible = showBars;
-                        this._setUsageMenuItem(weeklyItem, wins.weekly);
-                        this._usageSection.addMenuItem(weeklyItem.item);
-                    }
-                    if (this._provider.showFiveHour && wins.fiveHour) {
-                        const fiveHourItem = this._createUsageMenuItem('5-hour usage limit');
-                        fiveHourItem.barTrack.visible = showBars;
-                        this._setUsageMenuItem(fiveHourItem, wins.fiveHour);
-                        this._usageSection.addMenuItem(fiveHourItem.item);
+                if (profile.status === 'online') {
+                    const wins = assignWindows(profile.windows ?? []);
+                    if (wins.weekly || wins.fiveHour) {
+                        if (wins.weekly) {
+                            const weeklyItem = this._createUsageMenuItem('Weekly usage limit');
+                            weeklyItem.barTrack.visible = showBars;
+                            this._setUsageMenuItem(weeklyItem, wins.weekly);
+                            this._usageSection.addMenuItem(weeklyItem.item);
+                        }
+                        if (this._provider.showFiveHour && wins.fiveHour) {
+                            const fiveHourItem = this._createUsageMenuItem('5-hour usage limit');
+                            fiveHourItem.barTrack.visible = showBars;
+                            this._setUsageMenuItem(fiveHourItem, wins.fiveHour);
+                            this._usageSection.addMenuItem(fiveHourItem.item);
+                        }
+                    } else {
+                        const unavailableItem = this._createUnavailableItem('Usage unavailable');
+                        this._usageSection.addMenuItem(unavailableItem.item);
                     }
                 } else {
                     const offlineItem = this._createOfflineItem();
@@ -333,6 +338,21 @@ const CodexUsageIndicator = GObject.registerClass(
             });
             const label = new St.Label({
                 text: 'Detected · Offline',
+                x_expand: true,
+                x_align: Clutter.ActorAlign.START,
+                style_class: 'codex-usage-offline-label',
+            });
+            item.add_child(label);
+            return {item, label};
+        }
+
+        _createUnavailableItem(text = 'Usage unavailable') {
+            const item = new PopupMenu.PopupBaseMenuItem({
+                reactive: false,
+                can_focus: false,
+            });
+            const label = new St.Label({
+                text,
                 x_expand: true,
                 x_align: Clutter.ActorAlign.START,
                 style_class: 'codex-usage-offline-label',
@@ -446,7 +466,7 @@ const CodexUsageIndicator = GObject.registerClass(
             const usedPercent = this._getUsedPercent(window);
 
             entry.titleLabel.text = windowTitle(window.windowMinutes, entry.title);
-            if (window.label) entry.titleLabel.text += `\nMost used: ${window.label}`;
+            if (this._provider.id !== 'antigravity' && window.label) entry.titleLabel.text += `\nMost used: ${window.label}`;
             entry.valueLabel.text = `${remainingPercent}% remaining`;
             entry.resetLabel.text = this._formatReset(window.resetsAt);
             entry.countdownLabel.text = this._formatResetCountdown(window.resetsAt);
