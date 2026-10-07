@@ -24,7 +24,7 @@ function assert(condition, message) {
 }
 
 assert(providers.map(p => p.id).join(',') === 'codex,grok,antigravity', 'Provider order');
-assert(providers.filter(p => p.showFiveHour).map(p => p.id).join() === 'antigravity', 'Menu-only 5h');
+assert(providers.filter(p => p.showFiveHour).map(p => p.id).join() === 'codex,antigravity', 'Codex and Antigravity 5h menus');
 assert(selected.length > 0, 'Unknown provider');
 for (const provider of selected) {
     GdkPixbuf.Pixbuf.new_from_file_at_scale(`${root}/icons/${provider.icon}`, 16, 16, true);
@@ -41,7 +41,7 @@ for (const provider of selected) {
                     window.usedPercent <= 100, 'Invalid percentage');
                 assert(window.resetsAt > Date.now() / 1000, 'Expired/missing reset');
             }
-            if (provider.showFiveHour) assert(fiveHour?.label && weekly.label, 'Antigravity windows/group attribution');
+            if (provider.id === 'antigravity') assert(fiveHour?.label && weekly.label, 'Antigravity windows/group attribution');
             const restored = new UsageReader(settings, provider);
             assert(restored.observedAt === reader.observedAt &&
                 JSON.stringify(restored.windows) === JSON.stringify(reader.windows), 'Cache round trip');

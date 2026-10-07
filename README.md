@@ -8,7 +8,9 @@
 
 Phase 1 adds a fixed **Codex → Grok → Antigravity** sequence to the top bar.
 Each entry retains the minimal Codex layout: its logo and `N%` **remaining**.
-Each opens its own standard GNOME popup with weekly remaining, reset time and
+Codex shows 5-hour remaining in the top bar by default, falling back to weekly
+when the 5-hour window is not reported. Its popup includes both windows.
+Each opens its own standard GNOME popup with remaining usage, reset time and
 `Latest <provider> update`. Antigravity additionally shows 5-hour remaining **only
 in its popup**. The existing Codex logo, CSS, bar size and menu behavior are retained.
 
@@ -78,8 +80,8 @@ gnome-extensions prefs codex-usage@almighty-shogun
 | Panel box | Right | Which section of the top bar holds the indicator |
 | Position in box | 0 | Order within that box; `0` is first, `-1` is last, lower negatives count back from the end |
 | Show icon | On | Draw each provider logo beside the percentage |
-| Show 5-hour window | On | Legacy setting; keeps the panel weekly-only |
-| Show weekly window | On | Include the 7-day figure in the panel label |
+| Show 5-hour window | On | Prefer the Codex 5-hour figure in the panel label |
+| Show weekly window | On | Show the 7-day figure; Codex fallback when 5-hour is absent |
 | Show credits remaining | On | Legacy setting; the minimal menus omit credits |
 | Show progress bars | On | Draw a usage bar under each window in the menu |
 | Show Codex | On | Show Codex usage indicator in the top bar |
@@ -90,7 +92,7 @@ gnome-extensions prefs codex-usage@almighty-shogun
 
 Clutter appends on any negative index, so `-2` would otherwise be identical to `-1`. Values past `-1` are instead resolved against the box's contents when the indicator is inserted, making `-2` the second-to-last slot, `-3` the third-to-last and so on, clamped to the start of the box.
 
-Turning off the weekly window leaves the icons on their own. Only the two placement settings rebuild the indicator; the rest are applied to it in place.
+Turning off both windows leaves the Codex icon on its own; other providers use the weekly toggle. Only the two placement settings rebuild the indicator; the rest are applied to it in place.
 
 The installer writes these for you, so a fresh machine comes up configured:
 

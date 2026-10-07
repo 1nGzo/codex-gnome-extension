@@ -16,7 +16,7 @@ const RATE_LIMITS_REQUEST_ID = 2;
 const nowInSeconds = () => Math.floor(Date.now() / 1000);
 
 const CODEX = {
-    id: 'codex', name: 'Codex', icon: 'codex-icon.svg',
+    id: 'codex', name: 'Codex', icon: 'codex-icon.svg', showFiveHour: true,
     program: 'codex', args: ['app-server'], initialized: true,
     initialize: {
         clientInfo: {name: 'codex-usage', title: 'Codex Usage', version: '1.0.0'},

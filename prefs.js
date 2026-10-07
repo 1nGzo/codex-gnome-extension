@@ -121,14 +121,14 @@ export default class CodexUsagePreferences extends ExtensionPreferences {
 
         const fiveHourRow = new Adw.SwitchRow({
             title: 'Show 5-hour window',
-            subtitle: 'The 5-hour limit'
+            subtitle: 'Prefer the Codex 5-hour limit in the top bar'
         });
 
         settings.bind('show-five-hour', fiveHourRow, 'active', Gio.SettingsBindFlags.DEFAULT);
 
         const weeklyRow = new Adw.SwitchRow({
             title: 'Show weekly window',
-            subtitle: 'The 7-day limit'
+            subtitle: 'The 7-day limit; fallback for Codex when 5-hour usage is unavailable'
         });
 
         settings.bind('show-weekly', weeklyRow, 'active', Gio.SettingsBindFlags.DEFAULT);
