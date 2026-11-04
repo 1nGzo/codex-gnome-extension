@@ -24,8 +24,9 @@ in its popup**. The existing Codex logo, CSS, bar size and menu behavior are ret
   per-session token/cost totals are not substituted.
 - Antigravity's **default profile must be running and signed in**. A short-lived
   Python standard-library helper reads its own user's language-server process,
-  finds its loopback port, and calls `RetrieveUserQuotaSummary` with
-  `forceRefresh: true`. Its per-process CSRF token stays in memory and never enters
+  finds its loopback port, and calls `RetrieveUserQuotaSummary`. It requests a
+  fresh summary first; if that refresh times out or is canceled, it uses the
+  language server's cached summary. Its per-process CSRF token stays in memory and never enters
   the extension output, cache, logs, or repository. Alternate profiles and
   ambiguous default instances are excluded. No app is started or logged in.
 

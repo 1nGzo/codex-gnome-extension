@@ -227,6 +227,38 @@ def normalize(summary):
     return {'windows': windows}
 
 
+QUOTA_PATH = '/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary'
+# The cloud refresh often outlives the old 3s client timeout and is then
+# canceled. The panel probe itself allows 20s, so keep a bounded refresh and
+# fall back to the language server's cached summary.
+REFRESH_TIMEOUT = 8
+CACHE_TIMEOUT = 2
+
+
+def post_quota(port, token, force_refresh, timeout):
+    connection = http.client.HTTPConnection('127.0.0.1', port, timeout=timeout)
+    try:
+        connection.request(
+            'POST',
+            QUOTA_PATH,
+            body='{"forceRefresh":true}' if force_refresh else '{"forceRefresh":false}',
+            headers={'Content-Type': 'application/json', 'x-codeium-csrf-token': token}
+        )
+        response = connection.getresponse()
+        return response.status, response.read(1024 * 1024)
+    finally:
+        connection.close()
+
+
+def decode_quota(status, payload):
+    if status != 200:
+        return None, None
+    try:
+        return normalize(json.loads(payload)['response']), None
+    except (ValueError, KeyError, TypeError, AttributeError, OverflowError):
+        return None, 'invalid quota response'
+
+
 def query_quota(proc_path, token):
     try:
         discovered = ports(proc_path)
@@ -236,24 +268,34 @@ def query_quota(proc_path, token):
         return None, 'port unavailable'
     failure = 'rpc unavailable'
     for port in discovered:
-        connection = http.client.HTTPConnection('127.0.0.1', port, timeout=3)
+        # Read the cached summary before refreshing. A cloud failure (EOF,
+        # non-200, or a canceled forceRefresh) must not discard it. 400/404
+        # are the process's other listeners, not the quota port.
+        cached = None
         try:
-            connection.request(
-                'POST',
-                '/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary',
-                body='{"forceRefresh":true}',
-                headers={'Content-Type': 'application/json', 'x-codeium-csrf-token': token}
-            )
-            response = connection.getresponse()
-            if response.status == 200:
-                try:
-                    return normalize(json.loads(response.read(1024 * 1024))['response']), None
-                except (ValueError, KeyError, TypeError, AttributeError, OverflowError):
-                    failure = 'invalid quota response'
-        except (OSError, ValueError, KeyError, TypeError, http.client.HTTPException):
+            status, payload = post_quota(port, token, False, CACHE_TIMEOUT)
+        except (OSError, ValueError, http.client.HTTPException):
+            status, payload = None, b''
+        if status in (400, 404):
             continue
-        finally:
-            connection.close()
+        if status == 200:
+            quota, err = decode_quota(status, payload)
+            if quota:
+                cached = quota
+            elif err:
+                failure = err
+        try:
+            status, payload = post_quota(port, token, True, REFRESH_TIMEOUT if cached is None else 3)
+        except (OSError, ValueError, http.client.HTTPException):
+            status = None
+        if status == 200:
+            quota, err = decode_quota(status, payload)
+            if quota:
+                return quota, None
+            if err and cached is None:
+                failure = err
+        if cached:
+            return cached, None
     return None, failure
 
 
