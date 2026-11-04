@@ -252,8 +252,7 @@ const CodexUsageIndicator = GObject.registerClass(
 
             const windows = assignWindows(this._limits.windows);
             const labelText = this._formatPanelLabel(windows);
-            const windowsHidden = !this._settings.get_boolean('show-weekly') &&
-                !(this._provider.id === 'codex' && this._settings.get_boolean('show-five-hour'));
+            const windowsHidden = !this._settings.get_boolean('show-weekly');
 
             this._label.text = labelText === '' && !windowsHidden ? 'Usage unavailable' : labelText;
             this._label.visible = this._label.text !== '';
@@ -501,9 +500,6 @@ const CodexUsageIndicator = GObject.registerClass(
         }
 
         _formatPanelLabel(windows) {
-            if (this._provider.id === 'codex' && this._settings.get_boolean('show-five-hour') && windows.fiveHour)
-                return this._formatRemainingUsage(windows.fiveHour);
-
             const weekly = this._settings.get_boolean('show-weekly') ? windows.weekly : null;
             return weekly ? this._formatRemainingUsage(weekly) : '';
         }

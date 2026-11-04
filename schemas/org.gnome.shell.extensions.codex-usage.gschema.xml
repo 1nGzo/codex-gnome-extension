@@ -30,8 +30,8 @@
 
         <key name="show-five-hour" type="b">
             <default>true</default>
-            <summary>Show the 5-hour window in the panel</summary>
-            <description>The 5-hour usage window. Hiding both falls back to the icon alone.</description>
+            <summary>Show the 5-hour window</summary>
+            <description>Retained for compatibility. The top bar shows the weekly window.</description>
         </key>
 
         <key name="show-weekly" type="b">
