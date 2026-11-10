@@ -18,7 +18,7 @@
             <default>0</default>
             <range min="-21" max="20"/>
             <summary>Position within the box</summary>
-            <description>Order within the chosen panel box. 0 is first, -1 is last, and lower negatives count back from the end.
+            <description>Retained for compatibility. Indicators stay at the outer edge of the chosen panel box, so this value is not used.
             </description>
         </key>
 
@@ -62,12 +62,6 @@
             <default>true</default>
             <summary>Show Grok in the panel</summary>
             <description>Show Grok usage in the top bar.</description>
-        </key>
-
-        <key name="show-provider-antigravity" type="b">
-            <default>true</default>
-            <summary>Show Antigravity in the panel</summary>
-            <description>Show Antigravity usage in the top bar.</description>
         </key>
 
         <key name="use-24-hour-time" type="b">

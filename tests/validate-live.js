@@ -12,7 +12,7 @@ const source = Gio.SettingsSchemaSource.new_from_directory(
     schemaDirectory, Gio.SettingsSchemaSource.get_default(), false);
 const settings = new Gio.Settings({settings_schema:
     source.lookup('org.gnome.shell.extensions.codex-usage', false)});
-const providers = createProviders(root);
+const providers = createProviders();
 const selected = onlyProvider ? providers.filter(p => p.id === onlyProvider) : providers;
 const loop = new GLib.MainLoop(null, false);
 const readers = [];
@@ -23,8 +23,8 @@ function assert(condition, message) {
     if (!condition) throw new Error(message);
 }
 
-assert(providers.map(p => p.id).join(',') === 'codex,grok,antigravity', 'Provider order');
-assert(providers.filter(p => p.showFiveHour).map(p => p.id).join() === 'codex,antigravity', 'Codex and Antigravity 5h menus');
+assert(providers.map(p => p.id).join(',') === 'codex,grok', 'Provider order');
+assert(providers.filter(p => p.showFiveHour).map(p => p.id).join() === 'codex', 'Codex 5h menu');
 assert(selected.length > 0, 'Unknown provider');
 for (const provider of selected) {
     GdkPixbuf.Pixbuf.new_from_file_at_scale(`${root}/icons/${provider.icon}`, 16, 16, true);
@@ -41,7 +41,6 @@ for (const provider of selected) {
                     window.usedPercent <= 100, 'Invalid percentage');
                 assert(window.resetsAt > Date.now() / 1000, 'Expired/missing reset');
             }
-            if (provider.id === 'antigravity') assert(fiveHour?.label && weekly.label, 'Antigravity windows/group attribution');
             const restored = new UsageReader(settings, provider);
             assert(restored.observedAt === reader.observedAt &&
                 JSON.stringify(restored.windows) === JSON.stringify(reader.windows), 'Cache round trip');

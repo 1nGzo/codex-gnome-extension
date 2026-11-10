@@ -2,14 +2,14 @@
 // 1. 24-hour time format (HH:mm, no AM/PM / 上午/下午 in any locale)
 // 2. Provider auto-discovery and rescan (reusing provider probe, no credentials)
 // 3. Provider visibility toggles and persistence
-// 4. Usage behavior regression check across Codex, Grok, and Antigravity
+// 4. Usage behavior regression check across Codex and Grok
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import System from 'system';
 import {createProviders, detectProvider, UsageReader} from '../providers.js';
 import {assignWindows} from '../usage.js';
 
-const [root, schemaDirectory] = ARGV;
+const [, schemaDirectory] = ARGV;
 const source = Gio.SettingsSchemaSource.new_from_directory(
     schemaDirectory, Gio.SettingsSchemaSource.get_default(), false);
 const settings = new Gio.Settings({settings_schema:
@@ -40,8 +40,8 @@ print('PASS: 24-hour time format strictly HH:mm with zero AM/PM or 上午/下午
 
 // 2. Test Provider Visibility Settings Defaults and Persistence
 print('[2/4] Testing provider display settings & persistence...');
-const providers = createProviders(root);
-assert(providers.map(p => p.id).join(',') === 'codex,grok,antigravity', 'Provider order Codex -> Grok -> Antigravity');
+const providers = createProviders();
+assert(providers.map(p => p.id).join(',') === 'codex,grok', 'Provider order Codex -> Grok');
 
 for (const provider of providers) {
     const key = `show-provider-${provider.id}`;
@@ -135,13 +135,11 @@ for (const provider of providers) {
     const labelWithWeeklyOff = formatPanelLabel(simulatedWeeklyWindow, false);
     assert(labelWithWeeklyOff === '', 'Panel label should be empty when showWeekly is false');
 
-    // Antigravity 5h window must only be in menu, never in top bar
-    if (provider.id === 'antigravity') {
-        assert(provider.showFiveHour === true, 'Antigravity must have showFiveHour=true');
-        assert(rescanData.fiveHourRemaining !== null, 'Antigravity must provide 5h quota in menu');
+    if (provider.id === 'codex') {
+        assert(provider.showFiveHour === true, 'Codex keeps the 5-hour window in the menu');
     } else {
-        assert(!provider.showFiveHour, `${provider.id} must not have showFiveHour`);
-        assert(rescanData.fiveHourRemaining === null, `${provider.id} must not provide 5h quota`);
+        assert(!provider.showFiveHour, `${provider.id} must not show a 5-hour window`);
+        assert(rescanData.fiveHourRemaining === null, `${provider.id} must not provide a 5-hour quota`);
     }
 }
 print('PASS: Top bar simplified to logo + xx% without "Weekly" prefix; 5h retained exclusively in menu.');

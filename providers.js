@@ -5,11 +5,6 @@ import {parseCodex, parseGrok, usageWindow} from './usage.js';
 const UUID = 'codex-usage@almighty-shogun';
 const PROBE_TIMEOUT_SECONDS = 20;
 const MAX_BACKOFF_SECONDS = 3600;
-const ANTIGRAVITY_RETRIES = [5, 10, 20, 30, 60];
-const ANTIGRAVITY_IDLE_SECONDS = 30;
-const ANTIGRAVITY_ERRORS = new Set([
-    'process unavailable', 'port unavailable', 'rpc unavailable', 'invalid quota response',
-]);
 const CACHE_VERSION = 1;
 const HANDSHAKE_REQUEST_ID = 1;
 const RATE_LIMITS_REQUEST_ID = 2;
@@ -32,75 +27,17 @@ const GROK = {
     method: '_x.ai/billing', parse: parseGrok,
 };
 
-export function createProviders(extensionPath) {
+export function createProviders() {
     return [CODEX, GROK].map(provider => ({
         ...provider, probe: onDone => probeRpc(provider, onDone),
-    })).concat({
-        id: 'antigravity', name: 'Antigravity', icon: 'antigravity-icon.svg',
-        showFiveHour: true,
-        probe: onDone => probeAntigravity(extensionPath, onDone),
-    });
+    }));
 }
 
 export function detectProvider(provider, onDone) {
-    return provider.probe((reading, failure) => {
-        const available = Boolean(reading && (
-            (Array.isArray(reading.windows) && reading.windows.length > 0) ||
-            (Array.isArray(reading.profiles) && reading.profiles.length > 0)
-        ));
-        onDone(available, failure);
+    return provider.probe(reading => {
+        const available = Boolean(reading && Array.isArray(reading.windows) && reading.windows.length > 0);
+        onDone(available);
     });
-}
-
-function probeAntigravity(extensionPath, onDone) {
-    const python = GLib.find_program_in_path('python3');
-    if (!python) { onDone(null, 'rpc unavailable'); return null; }
-    let process;
-    try {
-        process = Gio.Subprocess.new([python, `${extensionPath}/read-antigravity.py`],
-            Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE);
-    } catch {
-        onDone(null, 'rpc unavailable');
-        return null;
-    }
-    const cancellable = new Gio.Cancellable();
-    let settled = false;
-    let timeoutId = 0;
-    const stop = () => {
-        settled = true;
-        if (timeoutId) GLib.Source.remove(timeoutId);
-        timeoutId = 0;
-        cancellable.cancel();
-        try { process.force_exit(); } catch { /* Already exited. */ }
-    };
-    const finish = (reading, failure = 'rpc unavailable') => {
-        if (settled) return;
-        stop();
-        onDone(reading, reading ? null : failure);
-    };
-    timeoutId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, PROBE_TIMEOUT_SECONDS, () => {
-        timeoutId = 0;
-        finish(null);
-        return GLib.SOURCE_REMOVE;
-    });
-    process.communicate_utf8_async(null, cancellable, (source, result) => {
-        if (settled) return;
-        let reading = null;
-        let failure = 'rpc unavailable';
-        try {
-            const [, stdout] = source.communicate_utf8_finish(result);
-            const payload = JSON.parse(stdout);
-            if (source.get_successful() && (
-                (Array.isArray(payload?.windows) && payload.windows.length) ||
-                (Array.isArray(payload?.profiles) && payload.profiles.length)
-            ))
-                reading = payload;
-            else if (ANTIGRAVITY_ERRORS.has(payload?.error)) failure = payload.error;
-            else failure = 'invalid quota response';
-        } catch { /* No valid reading. */ }
-        finish(reading, failure);
-    });
-    return {cancel: stop};
 }
 
 function probeRpc(provider, onDone) {
@@ -118,7 +55,7 @@ function probeRpc(provider, onDone) {
         const launcher = new Gio.SubprocessLauncher({flags:
             Gio.SubprocessFlags.STDIN_PIPE | Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE});
         // CLI tools do not inherit GNOME's manual proxy as environment variables.
-        // Preserve explicit environment overrides; local Antigravity never uses it.
+        // Preserve explicit environment overrides.
         const proxy = new Gio.Settings({schema_id: 'org.gnome.system.proxy'});
         if (proxy.get_string('mode') === 'manual') {
             const http = new Gio.Settings({schema_id: 'org.gnome.system.proxy.http'});
@@ -259,12 +196,8 @@ export class UsageReader {
         this._path = GLib.build_filenamev([GLib.get_user_cache_dir(), UUID, provider.id === 'codex' ? 'limits.json' : `${provider.id}-limits.json`]);
         this._observedAt = 0;
         this._windows = [];
-        this._profiles = [];
         this._retryAt = 0;
         this._backoff = 0;
-        this._startupAttempts = 0;
-        this._retryTimer = 0;
-        this.failureReason = null;
         this._probe = null;
 
         this._load();
@@ -276,10 +209,6 @@ export class UsageReader {
 
     get windows() {
         return this._windows;
-    }
-
-    get profiles() {
-        return this._profiles;
     }
 
     get hasReading() {
@@ -298,22 +227,10 @@ export class UsageReader {
 
         if (nowInSeconds() < due) return;
 
-        if (this._retryTimer) GLib.Source.remove(this._retryTimer);
-        this._retryTimer = 0;
-        this._probe = this.provider.probe((reading, failure) => {
+        this._probe = this.provider.probe(reading => {
             this._probe = null;
 
-            this._accept(reading, interval, failure);
-            if (this.provider.id === 'antigravity' && this.failed && this._startupAttempts <= ANTIGRAVITY_RETRIES.length &&
-                ANTIGRAVITY_ERRORS.has(this.failureReason) && this._backoff === 0) {
-                // The panel polls every 30s; its cadence cannot drive 5s retries.
-                this._retryTimer = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT,
-                    Math.max(1, this._retryAt - nowInSeconds()), () => {
-                        this._retryTimer = 0;
-                        this.poll(onReading);
-                        return GLib.SOURCE_REMOVE;
-                    });
-            }
+            this._accept(reading, interval);
             onReading();
         });
     }
@@ -323,62 +240,32 @@ export class UsageReader {
             this._probe.cancel();
             this._probe = null;
         }
-        if (this._retryTimer) {
-            GLib.Source.remove(this._retryTimer);
-            this._retryTimer = 0;
-        }
         this._retryAt = 0;
         this._backoff = 0;
-        this._startupAttempts = 0;
         const interval = this._settings.get_int('limit-interval');
-        this._probe = this.provider.probe((reading, failure) => {
+        this._probe = this.provider.probe(reading => {
             this._probe = null;
-            this._accept(reading, interval, failure);
+            this._accept(reading, interval);
             onReading?.();
         });
     }
 
     destroy() {
-        if (this._retryTimer) GLib.Source.remove(this._retryTimer);
-        this._retryTimer = 0;
         this._probe?.cancel();
         this._probe = null;
     }
 
-    _accept(reading, interval, failure = null) {
-        const previousFailure = this.failureReason;
+    _accept(reading, interval) {
         this.failed = !reading;
-        this.failureReason = this.provider.id === 'antigravity' && !reading
-            ? (ANTIGRAVITY_ERRORS.has(failure) ? failure : 'rpc unavailable') : null;
         if (!reading) {
-            if (this.provider.id === 'antigravity' && ANTIGRAVITY_ERRORS.has(this.failureReason)) {
-                const wasProcessUnavailable = previousFailure === 'process unavailable';
-                const isProcessUnavailable = this.failureReason === 'process unavailable';
-                if (wasProcessUnavailable !== isProcessUnavailable) {
-                    this._startupAttempts = 0;
-                    this._backoff = 0;
-                }
-                if (this._startupAttempts < ANTIGRAVITY_RETRIES.length) {
-                    this._retryAt = nowInSeconds() + ANTIGRAVITY_RETRIES[this._startupAttempts++];
-                    return;
-                }
-                if (isProcessUnavailable) {
-                    this._startupAttempts = ANTIGRAVITY_RETRIES.length + 1;
-                    this._backoff = 0;
-                    this._retryAt = nowInSeconds() + ANTIGRAVITY_IDLE_SECONDS;
-                    return;
-                }
-            }
             this._backoff = Math.min(MAX_BACKOFF_SECONDS, Math.max(interval, this._backoff) * 2);
             this._retryAt = nowInSeconds() + this._backoff;
 
             return;
         }
 
-        this._startupAttempts = 0;
         this._observedAt = nowInSeconds();
         this._windows = reading.windows ?? [];
-        this._profiles = reading.profiles ?? [];
         this._backoff = 0;
         this._retryAt = 0;
 
@@ -407,7 +294,6 @@ export class UsageReader {
         this._observedAt = Number(cached.observed_at) || 0;
         this._windows = Array.isArray(cached.windows)
             ? cached.windows.map(w => usageWindow(w.usedPercent, w.windowMinutes, w.resetsAt, w.label)).filter(Boolean) : [];
-        this._profiles = Array.isArray(cached.profiles) ? cached.profiles : [];
     }
 
     _save() {
@@ -418,7 +304,6 @@ export class UsageReader {
                 version: CACHE_VERSION,
                 observed_at: this._observedAt,
                 windows: this._windows,
-                profiles: this._profiles,
             }));
         } catch (error) {
             log(`${UUID}: Failed to write ${this._path}: ${error.message}`);

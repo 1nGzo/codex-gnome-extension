@@ -8,7 +8,7 @@ import { createProviders, detectProvider } from './providers.js';
 export default class CodexUsagePreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
         const settings = this.getSettings();
-        const providers = createProviders(this.path);
+        const providers = createProviders();
 
         const page = new Adw.PreferencesPage({
             title: 'Codex Usage',
@@ -79,12 +79,12 @@ export default class CodexUsagePreferences extends ExtensionPreferences {
 
         const panelGroup = new Adw.PreferencesGroup({
             title: 'Panel',
-            description: 'Where the indicator sits and what it shows in the top bar.'
+            description: 'Codex and Grok stay together at the outer edge of the chosen top-bar section.'
         });
 
         const positionRow = new Adw.ComboRow({
             title: 'Panel box',
-            subtitle: 'Section of the top bar to place the indicator in',
+            subtitle: 'Left stays on the left edge. Center and right stay on the right edge.',
             model: new Gtk.StringList({ strings: ['Left', 'Center', 'Right'] })
         });
 
@@ -94,22 +94,6 @@ export default class CodexUsagePreferences extends ExtensionPreferences {
 
         positionRow.connect('notify::selected', () => {
             settings.set_string('panel-position', positions[positionRow.selected]);
-        });
-
-        const indexRow = new Adw.SpinRow({
-            title: 'Position in box',
-            subtitle: '0 is first, -1 is last, lower negatives count back from the end',
-            adjustment: new Gtk.Adjustment({
-                lower: -21,
-                upper: 20,
-                step_increment: 1
-            })
-        });
-
-        indexRow.value = settings.get_int('panel-index');
-
-        indexRow.connect('notify::value', () => {
-            settings.set_int('panel-index', Math.round(indexRow.value));
         });
 
         const iconRow = new Adw.SwitchRow({
@@ -134,7 +118,6 @@ export default class CodexUsagePreferences extends ExtensionPreferences {
         settings.bind('show-weekly', weeklyRow, 'active', Gio.SettingsBindFlags.DEFAULT);
 
         panelGroup.add(positionRow);
-        panelGroup.add(indexRow);
         panelGroup.add(iconRow);
         panelGroup.add(fiveHourRow);
         panelGroup.add(weeklyRow);

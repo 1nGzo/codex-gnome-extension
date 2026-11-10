@@ -1,5 +1,7 @@
 # Phase 1 local-source audit
 
+Antigravity monitoring was removed after this audit. The extension now reads Codex and Grok only. The notes below are the original Phase 1 record.
+
 Audited 2026-09-19 (Asia/Taipei), on **zoNuc**, after the user explicitly changed
 this run's target from X1C. This is not X1C validation.
 

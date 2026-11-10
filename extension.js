@@ -25,10 +25,8 @@ const PANEL_BOXES = {
 
 const REBUILD_KEYS = [
     'panel-position',
-    'panel-index',
     'show-provider-codex',
-    'show-provider-grok',
-    'show-provider-antigravity'
+    'show-provider-grok'
 ];
 
 const APPEARANCE_KEYS = [
@@ -112,11 +110,9 @@ const CodexUsageIndicator = GObject.registerClass(
             this._weeklyItem = this._createUsageMenuItem('Weekly usage limit');
             this._statusItem = this._createCenteredMessageItem();
 
-            if (this._provider.id !== 'antigravity') {
-                this._fiveHourItem.item.visible = this._provider.showFiveHour === true;
-                this._usageSection.addMenuItem(this._fiveHourItem.item);
-                this._usageSection.addMenuItem(this._weeklyItem.item);
-            }
+            this._fiveHourItem.item.visible = this._provider.showFiveHour === true;
+            this._usageSection.addMenuItem(this._fiveHourItem.item);
+            this._usageSection.addMenuItem(this._weeklyItem.item);
 
             this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
             this.menu.addMenuItem(this._statusItem.item);
@@ -232,11 +228,6 @@ const CodexUsageIndicator = GObject.registerClass(
         }
 
         _render() {
-            if (this._provider.id === 'antigravity' && Array.isArray(this._limits.profiles) && this._limits.profiles.length > 0) {
-                this._renderAntigravityProfiles();
-                return;
-            }
-
             if (!this._limits.hasReading) {
                 if (this._limits.busy && this._label.text === `Loading ${this._provider.name} usage...`) return;
 
@@ -261,104 +252,6 @@ const CodexUsageIndicator = GObject.registerClass(
 
             this._setUsageMenuItem(this._fiveHourItem, windows.fiveHour);
             this._setUsageMenuItem(this._weeklyItem, windows.weekly);
-        }
-
-        _renderAntigravityProfiles() {
-            const profiles = this._limits.profiles;
-            const windowsHidden = !this._settings.get_boolean('show-weekly');
-            const defaultProfile = profiles.find(p => p.id === 'default') ?? profiles[0];
-            const defaultWindows = defaultProfile?.windows ? assignWindows(defaultProfile.windows) : {fiveHour: null, weekly: null};
-            const labelText = this._formatPanelLabel(defaultWindows);
-
-            if (defaultProfile?.status === 'online' && defaultWindows.weekly) {
-                this._label.text = labelText === '' && !windowsHidden ? 'Usage unavailable' : labelText;
-            } else {
-                this._label.text = 'Usage unavailable';
-            }
-            this._label.visible = this._label.text !== '';
-
-            this._statusItem.label.text = this._formatStatusLine(this._limits.observedAt);
-
-            this._usageSection.removeAll();
-            const showBars = this._settings.get_boolean('show-progress-bars');
-
-            profiles.forEach((profile, index) => {
-                if (index > 0) {
-                    this._usageSection.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-                }
-
-                const header = this._createProfileHeaderItem(profile.name);
-                this._usageSection.addMenuItem(header.item);
-
-                if (profile.status === 'online') {
-                    const wins = assignWindows(profile.windows ?? []);
-                    if (wins.weekly || wins.fiveHour) {
-                        if (wins.weekly) {
-                            const weeklyItem = this._createUsageMenuItem('Weekly usage limit');
-                            weeklyItem.barTrack.visible = showBars;
-                            this._setUsageMenuItem(weeklyItem, wins.weekly);
-                            this._usageSection.addMenuItem(weeklyItem.item);
-                        }
-                        if (this._provider.showFiveHour && wins.fiveHour) {
-                            const fiveHourItem = this._createUsageMenuItem('5-hour usage limit');
-                            fiveHourItem.barTrack.visible = showBars;
-                            this._setUsageMenuItem(fiveHourItem, wins.fiveHour);
-                            this._usageSection.addMenuItem(fiveHourItem.item);
-                        }
-                    } else {
-                        const unavailableItem = this._createUnavailableItem('Usage unavailable');
-                        this._usageSection.addMenuItem(unavailableItem.item);
-                    }
-                } else {
-                    const offlineItem = this._createOfflineItem();
-                    this._usageSection.addMenuItem(offlineItem.item);
-                }
-            });
-        }
-
-        _createProfileHeaderItem(title) {
-            const item = new PopupMenu.PopupBaseMenuItem({
-                reactive: false,
-                can_focus: false,
-            });
-            const label = new St.Label({
-                text: title,
-                x_expand: true,
-                x_align: Clutter.ActorAlign.START,
-                style_class: 'codex-usage-profile-title',
-            });
-            item.add_child(label);
-            return {item, label};
-        }
-
-        _createOfflineItem() {
-            const item = new PopupMenu.PopupBaseMenuItem({
-                reactive: false,
-                can_focus: false,
-            });
-            const label = new St.Label({
-                text: 'Detected · Offline',
-                x_expand: true,
-                x_align: Clutter.ActorAlign.START,
-                style_class: 'codex-usage-offline-label',
-            });
-            item.add_child(label);
-            return {item, label};
-        }
-
-        _createUnavailableItem(text = 'Usage unavailable') {
-            const item = new PopupMenu.PopupBaseMenuItem({
-                reactive: false,
-                can_focus: false,
-            });
-            const label = new St.Label({
-                text,
-                x_expand: true,
-                x_align: Clutter.ActorAlign.START,
-                style_class: 'codex-usage-offline-label',
-            });
-            item.add_child(label);
-            return {item, label};
         }
 
         _createCenteredMessageItem(styleClass = 'codex-usage-status-label') {
@@ -466,7 +359,7 @@ const CodexUsageIndicator = GObject.registerClass(
             const usedPercent = this._getUsedPercent(window);
 
             entry.titleLabel.text = windowTitle(window.windowMinutes, entry.title);
-            if (this._provider.id !== 'antigravity' && window.label) entry.titleLabel.text += `\nMost used: ${window.label}`;
+            if (window.label) entry.titleLabel.text += `\nMost used: ${window.label}`;
             entry.valueLabel.text = `${remainingPercent}% remaining`;
             entry.resetLabel.text = this._formatReset(window.resetsAt);
             entry.countdownLabel.text = this._formatResetCountdown(window.resetsAt);
@@ -577,7 +470,7 @@ const CodexUsageIndicator = GObject.registerClass(
 export default class CodexUsageExtension extends Extension {
     enable() {
         this._settings = this.getSettings();
-        this._readers = createProviders(this.path).map(provider => new UsageReader(this._settings, provider));
+        this._readers = createProviders().map(provider => new UsageReader(this._settings, provider));
 
         this._settingsSignalIds = [
             ...REBUILD_KEYS.map(
@@ -597,47 +490,131 @@ export default class CodexUsageExtension extends Extension {
 
         this._settingsSignalIds = null;
 
+        this._unwatchPanelBox();
         this._indicators?.forEach(indicator => indicator.destroy());
         this._readers?.forEach(reader => reader.destroy());
 
         this._indicators = null;
         this._readers = null;
+        this._panelBox = null;
         this._settings = null;
     }
 
     _build() {
         const position = this._settings.get_string('panel-position');
-        const index = this._resolveIndex(this._settings.get_int('panel-index'), position);
+        this._panelBox = PANEL_BOXES[position] ?? PANEL_BOXES.right;
         this._indicators = [];
 
-        let offset = 0;
-        for (const reader of this._readers) {
-            const key = `show-provider-${reader.provider.id}`;
-            if (!this._settings.get_boolean(key)) continue;
+        // The right box is aligned to the screen edge and grows inward. A fixed
+        // index therefore slides whenever another status icon is added. Place
+        // both providers on the outer edge and put them back there if the box changes.
+        this._pinning = true;
+        try {
+            for (const reader of this._readers) {
+                const key = `show-provider-${reader.provider.id}`;
+                if (!this._settings.get_boolean(key)) continue;
 
-            const indicator = new CodexUsageIndicator(this, this._settings, reader);
-            const role = reader.provider.id === 'codex' ? this.uuid : `${this.uuid}-${reader.provider.id}`;
-            Main.panel.addToStatusArea(
-                role,
-                indicator,
-                index < 0 ? index : index + offset,
-                position
-            );
-            this._indicators.push(indicator);
-            offset++;
+                const indicator = new CodexUsageIndicator(this, this._settings, reader);
+                const role = reader.provider.id === 'codex' ? this.uuid : `${this.uuid}-${reader.provider.id}`;
+                Main.panel.addToStatusArea(role, indicator, 0, position);
+                this._indicators.push(indicator);
+            }
+            this._pinToEdge();
+        } finally {
+            this._pinning = false;
+        }
+
+        this._watchPanelBox();
+    }
+
+    _panelActors() {
+        return this._panelBox ? Main.panel[this._panelBox] : null;
+    }
+
+    // Left is the screen's left edge. Center and right stay at the right side of
+    // their box, which is the screen edge for the right box.
+    _edgeIsStart() {
+        return this._panelBox === '_leftBox';
+    }
+
+    _indicatorContainers(box) {
+        return (this._indicators ?? [])
+            .map(indicator => indicator.container)
+            .filter(container => container?.get_parent() === box);
+    }
+
+    _alreadyAtEdge(box, containers) {
+        if (this._edgeIsStart())
+            return containers.every((container, index) => box.get_child_at_index(index) === container);
+
+        const start = box.get_n_children() - containers.length;
+        return start >= 0 && containers.every((container, index) => box.get_child_at_index(start + index) === container);
+    }
+
+    _pinToEdge() {
+        const box = this._panelActors();
+        if (!box) return;
+
+        const containers = this._indicatorContainers(box);
+        if (containers.length === 0 || this._alreadyAtEdge(box, containers)) return;
+
+        this._pinning = true;
+        try {
+            for (const container of containers)
+                box.remove_child(container);
+
+            if (this._edgeIsStart()) {
+                for (let index = 0; index < containers.length; index++)
+                    box.insert_child_at_index(containers[index], index);
+            } else {
+                for (const container of containers)
+                    box.insert_child_at_index(container, -1);
+            }
+        } finally {
+            this._pinning = false;
         }
     }
 
-    _resolveIndex(index, position) {
-        if (index >= -1) return index;
+    _watchPanelBox() {
+        this._unwatchPanelBox();
+        const box = this._panelActors();
+        if (!box) return;
 
-        const box = PANEL_BOXES[position] ?? PANEL_BOXES.right;
-        const children = Main.panel[box]?.get_n_children() ?? 0;
+        const schedule = () => {
+            if (!this._pinning)
+                this._schedulePin();
+        };
+        this._boxSignalIds = [
+            box.connect('child-added', schedule),
+            box.connect('child-removed', schedule),
+        ];
+    }
 
-        return Math.max(0, children + index + 1);
+    _schedulePin() {
+        if (this._pinIdle) return;
+
+        this._pinIdle = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+            this._pinIdle = 0;
+            if (this._indicators)
+                this._pinToEdge();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _unwatchPanelBox() {
+        const box = this._panelActors();
+        for (const id of this._boxSignalIds ?? [])
+            box?.disconnect(id);
+
+        this._boxSignalIds = null;
+        if (this._pinIdle) {
+            GLib.Source.remove(this._pinIdle);
+            this._pinIdle = 0;
+        }
     }
 
     _rebuild() {
+        this._unwatchPanelBox();
         this._indicators?.forEach(indicator => indicator.destroy());
         this._indicators = null;
 
